@@ -1,0 +1,1489 @@
+/* ==========================================================================
+   Sentinel Govern — AI Governance & Lifecycle Platform Design System
+   Multi-Theme (Light / Dark) • Inter Typography • Restrained Precision
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ─── 1. Design Tokens: Light Theme (Primary Foundation) ─────────────────── */
+:root,
+[data-theme="light"] {
+  /* Surface & Canvas Hierarchy */
+  --color-bg: #F7F8FA;
+  --color-surface: #FFFFFF;
+  --color-surface-secondary: #F1F4F7;
+  --color-surface-elevated: #FFFFFF;
+
+  /* Typography Colors */
+  --color-text: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+
+  /* Borders & Dividers */
+  --color-border: #E2E6EB;
+  --color-border-subtle: #EDF0F4;
+  --color-border-strong: #CBD2DA;
+  --color-border-focus: #315EFB;
+
+  /* Primary Brand: Blue / Indigo Identity */
+  --color-primary: #315EFB;
+  --color-primary-hover: #2448D8;
+  --color-primary-active: #1D3AA9;
+  --color-secondary-accent: #4F46E5;
+  --color-accent-subtle: #EEF2FF;
+  --color-accent-border: #D6E0FE;
+
+  /* Overlays */
+  --color-overlay: rgba(17, 24, 39, 0.45);
+
+  /* Semantic Status Tokens */
+  --color-success: #16803C;
+  --color-success-bg: #EAF7EF;
+  --color-success-border: #BCE2C8;
+  --color-success-text: #166534;
+
+  --color-warning: #B7791F;
+  --color-warning-bg: #FFF7E6;
+  --color-warning-border: #FDE68A;
+  --color-warning-text: #92400E;
+
+  --color-danger: #C0392B;
+  --color-danger-bg: #FDEEEE;
+  --color-danger-border: #F9C9C5;
+  --color-danger-text: #991B1B;
+
+  --color-info: #2563EB;
+  --color-info-bg: #EFF6FF;
+  --color-info-border: #C7D2FE;
+  --color-info-text: #1E40AF;
+
+  --neutral-badge-bg: #F1F4F7;
+  --neutral-badge-text: #4B5563;
+  --neutral-badge-border: #E2E6EB;
+
+  /* Elevation Shadows (Restrained, subtle) */
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 1px 2px rgba(17, 24, 39, 0.03);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.05);
+  --shadow-lg: 0 8px 24px rgba(17, 24, 39, 0.06);
+  --shadow-dropdown: 0 12px 32px -4px rgba(17, 24, 39, 0.08), 0 4px 12px rgba(17, 24, 39, 0.04);
+
+  /* Geometry & Timing */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Compatibility Aliases */
+  --bg-app: var(--color-bg);
+  --bg-base: var(--color-bg);
+  --bg-surface: var(--color-surface);
+  --surface-primary: var(--color-surface);
+  --bg-card: var(--color-surface);
+  --surface-secondary: var(--color-surface-secondary);
+  --bg-subtle: var(--color-surface-secondary);
+  --color-surface-subtle: var(--color-surface-secondary);
+  --bg-surface-elevated: var(--color-surface-elevated);
+  --surface-elevated: var(--color-surface-elevated);
+  --bg-sidebar: var(--color-surface);
+  --color-sidebar: var(--color-surface);
+  --bg-sidebar-hover: var(--color-surface-secondary);
+  --bg-hover: var(--color-surface-secondary);
+  --color-hover: var(--color-surface-secondary);
+  --bg-card-hover: var(--color-surface-secondary);
+  --surface-selected-blue: var(--color-accent-subtle);
+  --bg-selected: var(--color-accent-subtle);
+  --color-selected: var(--color-accent-subtle);
+  --bg-sidebar-active: var(--color-accent-subtle);
+  --accent-subtle: var(--color-accent-subtle);
+  --primary-brand: var(--color-primary);
+  --accent-primary: var(--color-primary);
+  --primary-hover: var(--color-primary-hover);
+  --accent-primary-hover: var(--color-primary-hover);
+  --accent-primary-active: var(--color-primary-active);
+  --deep-brand: var(--color-secondary-accent);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-tertiary: var(--color-text-muted);
+  --text-inverse: var(--color-text-inverse);
+  --border-color: var(--color-border);
+  --border-subtle: var(--color-border-subtle);
+  --border-strong: var(--color-border-strong);
+  --border-focus: var(--color-border-focus);
+  --bg-overlay: var(--color-overlay);
+  --success: var(--color-success);
+  --success-text: var(--color-success-text);
+  --success-bg: var(--color-success-bg);
+  --success-border: var(--color-success-border);
+  --warning: var(--color-warning);
+  --warning-text: var(--color-warning-text);
+  --warning-bg: var(--color-warning-bg);
+  --warning-border: var(--color-warning-border);
+  --danger: var(--color-danger);
+  --danger-text: var(--color-danger-text);
+  --danger-bg: var(--color-danger-bg);
+  --danger-border: var(--color-danger-border);
+  --info: var(--color-info);
+  --info-text: var(--color-info-text);
+  --info-bg: var(--color-info-bg);
+  --info-border: var(--color-info-border);
+}
+
+/* ─── 2. Design Tokens: Dark Theme (Tonal & Structured) ──────────────────── */
+[data-theme="dark"] {
+  /* Surface & Canvas Hierarchy — Deep Neutral Carbon & Obsidian */
+  --color-bg: #080A0E;
+  --color-surface: #0E1218;
+  --color-surface-secondary: #131821;
+  --color-surface-elevated: #18202B;
+
+  /* Typography Colors — High-Legibility Slate Hierarchy */
+  --color-text: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+  --color-text-inverse: #080A0E;
+
+  /* Borders & Dividers — Precision 1px Structural Micro-Borders */
+  --color-border: #1E2530;
+  --color-border-subtle: #141A23;
+  --color-border-strong: #2D3748;
+  --color-border-focus: #3B82F6;
+
+  /* Primary Brand: Precision Enterprise Cobalt (Zero Lavender/Purple Drift) */
+  --color-primary: #3B82F6;
+  --color-primary-hover: #2563EB;
+  --color-primary-active: #1D4ED8;
+  --color-secondary-accent: #60A5FA;
+  --color-accent-subtle: #0B1320;
+  --color-accent-border: #1D2D47;
+
+  /* Overlays */
+  --color-overlay: rgba(4, 6, 9, 0.82);
+
+  /* Semantic Status Tokens — Surgical, High-Contrast Regulatory Signals */
+  --color-success: #10B981;
+  --color-success-bg: #062316;
+  --color-success-border: #0D472B;
+  --color-success-text: #34D399;
+
+  --color-warning: #F59E0B;
+  --color-warning-bg: #241804;
+  --color-warning-border: #52370A;
+  --color-warning-text: #FBBF24;
+
+  --color-danger: #EF4444;
+  --color-danger-bg: #260C0D;
+  --color-danger-border: #571618;
+  --color-danger-text: #F87171;
+
+  --color-info: #3B82F6;
+  --color-info-bg: #0B172E;
+  --color-info-border: #1B3564;
+  --color-info-text: #93C5FD;
+
+  --neutral-badge-bg: #131821;
+  --neutral-badge-text: #94A3B8;
+  --neutral-badge-border: #1E2530;
+
+  /* Elevation Shadows (Tonal surfaces dominate; subtle deep drop) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.60);
+  --shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.70);
+  --shadow-dropdown: 0 16px 36px -4px rgba(0, 0, 0, 0.85), 0 4px 14px rgba(0, 0, 0, 0.60);
+
+  /* Compatibility Aliases */
+  --bg-app: var(--color-bg);
+  --bg-base: var(--color-bg);
+  --bg-surface: var(--color-surface);
+  --surface-primary: var(--color-surface);
+  --bg-card: var(--color-surface);
+  --surface-secondary: var(--color-surface-secondary);
+  --bg-subtle: var(--color-surface-secondary);
+  --color-surface-subtle: var(--color-surface-secondary);
+  --bg-surface-elevated: var(--color-surface-elevated);
+  --surface-elevated: var(--color-surface-elevated);
+  --bg-sidebar: var(--color-surface);
+  --color-sidebar: var(--color-surface);
+  --bg-sidebar-hover: var(--color-surface-secondary);
+  --bg-hover: var(--color-surface-secondary);
+  --color-hover: var(--color-surface-secondary);
+  --bg-card-hover: var(--color-surface-secondary);
+  --surface-selected-blue: var(--color-accent-subtle);
+  --bg-selected: var(--color-accent-subtle);
+  --color-selected: var(--color-accent-subtle);
+  --bg-sidebar-active: var(--color-accent-subtle);
+  --accent-subtle: var(--color-accent-subtle);
+  --primary-brand: var(--color-primary);
+  --accent-primary: var(--color-primary);
+  --primary-hover: var(--color-primary-hover);
+  --accent-primary-hover: var(--color-primary-hover);
+  --accent-primary-active: var(--color-primary-active);
+  --deep-brand: var(--color-secondary-accent);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-tertiary: var(--color-text-muted);
+  --text-inverse: var(--color-text-inverse);
+  --border-color: var(--color-border);
+  --border-subtle: var(--color-border-subtle);
+  --border-strong: var(--color-border-strong);
+  --border-focus: var(--color-border-focus);
+  --bg-overlay: var(--color-overlay);
+  --success: var(--color-success);
+  --success-text: var(--color-success-text);
+  --success-bg: var(--color-success-bg);
+  --success-border: var(--color-success-border);
+  --warning: var(--color-warning);
+  --warning-text: var(--color-warning-text);
+  --warning-bg: var(--color-warning-bg);
+  --warning-border: var(--color-warning-border);
+  --danger: var(--color-danger);
+  --danger-text: var(--color-danger-text);
+  --danger-bg: var(--color-danger-bg);
+  --danger-border: var(--color-danger-border);
+  --info: var(--color-info);
+  --info-text: var(--color-info-text);
+  --info-bg: var(--color-info-bg);
+  --info-border: var(--color-info-border);
+}
+
+/* ─── 3. Global Reset & Base Typography ──────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  line-height: 1.5;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-feature-settings: 'tnum';
+}
+
+.tnum, .metric-value, table td {
+  font-feature-settings: 'tnum';
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── 4. Application Shell Layout ────────────────────────────────────────── */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+.sidebar {
+  width: 250px;
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  transition: width var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.sidebar.collapsed {
+  width: 68px;
+}
+
+.main-content {
+  margin-left: 250px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background-color: var(--color-bg);
+  transition: margin-left var(--transition-normal), background-color var(--transition-normal);
+}
+
+.main-content.sidebar-collapsed {
+  margin-left: 68px;
+}
+
+/* ─── 5. Top Navigation Header (Navbar) ─────────────────────────────────── */
+.navbar {
+  height: 54px;
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.navbar-workspace-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.navbar-workspace-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.navbar-domain-divider {
+  color: var(--color-border-strong);
+  font-size: 11px;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navbar-gate-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.navbar-role-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.navbar-role-icon {
+  color: var(--color-primary);
+}
+
+.navbar-role-text strong {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.navbar-verified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-success-border);
+  margin-left: 4px;
+}
+
+.navbar-pending-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-warning-border);
+  margin-left: 4px;
+}
+
+/* ─── 6. Light / Dark Theme Toggle Button ───────────────────────────────── */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--color-border-subtle);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.theme-toggle-btn.icon-only {
+  padding: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.theme-icon.sun {
+  color: var(--color-warning);
+}
+
+.theme-icon.moon {
+  color: var(--color-primary);
+}
+
+/* ─── 7. Sidebar Brand & Nav Links ──────────────────────────────────────── */
+.brand {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.brand-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.brand-icon {
+  width: 28px;
+  height: 28px;
+  background-color: var(--color-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.brand-text h1 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.brand-text span {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--color-text);
+  background-color: var(--color-surface-secondary);
+}
+
+.nav-links {
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nav-group-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  padding: 12px 10px 4px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  position: relative;
+}
+
+.nav-link:hover {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+}
+
+.nav-link.active {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background-color: var(--color-primary);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+
+.nav-link-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-link-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── 8. Bottom-Left User Account Card & Popover ─────────────────────────── */
+.sidebar-footer {
+  padding: 10px;
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  position: relative;
+}
+
+.user-profile-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.user-profile-card:hover {
+  background-color: var(--color-border-subtle);
+  border-color: var(--color-border-strong);
+}
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--color-accent-subtle);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-accent-border);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.user-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.account-popover-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 8px;
+  right: 8px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  padding: 8px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar.collapsed .account-popover-menu {
+  position: fixed;
+  bottom: 16px;
+  left: 74px;
+  right: auto;
+  width: 230px;
+}
+
+.account-popover-header {
+  padding: 6px 8px 8px;
+}
+
+.account-popover-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.account-popover-email {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.account-popover-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.account-popover-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  background-color: var(--color-accent-subtle);
+  color: var(--color-primary);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-accent-border);
+}
+
+.account-popover-presence {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-success-text);
+  font-weight: 500;
+}
+
+.account-popover-divider {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 4px 0;
+}
+
+.account-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.account-popover-item:hover {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-primary);
+}
+
+.account-popover-item.logout {
+  color: var(--color-danger-text);
+}
+
+.account-popover-item.logout:hover {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+/* ─── 9. Page Containers & Typography Scale ──────────────────────────────── */
+.page-container {
+  padding: 28px 36px 56px;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.page-subtitle {
+  font-size: 13.5px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  line-height: 1.5;
+  max-width: 780px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ─── 10. Cards & Enterprise Metric Containers ──────────────────────────── */
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition-fast), background-color var(--transition-normal);
+}
+
+.card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.01em;
+}
+
+.card-description {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition-fast), background-color var(--transition-normal);
+}
+
+.metric-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.metric-icon-wrap {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  line-height: 1.15;
+}
+
+.metric-sub {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── 11. Status Indicators & Badges ────────────────────────────────────── */
+.status-dot {
+  display: inline-block;
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.healthy, .status-dot.active, .status-dot.in_production, .status-dot.approved, .status-dot.passed {
+  background-color: var(--color-success);
+}
+
+.status-dot.pulse {
+  box-shadow: 0 0 0 0 rgba(22, 128, 60, 0.4);
+  animation: pulse-dot 2.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(49, 94, 251, 0.4); }
+  70% { transform: scale(1); box-shadow: 0 0 0 4px rgba(49, 94, 251, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(49, 94, 251, 0); }
+}
+
+.status-dot.warning, .status-dot.pending, .status-dot.pending_approval {
+  background-color: var(--color-warning);
+}
+
+.status-dot.drift, .status-dot.drift_detected, .status-dot.danger, .status-dot.unacceptable, .status-dot.failed, .status-dot.critical {
+  background-color: var(--color-danger);
+}
+
+.status-dot.neutral, .status-dot.draft, .status-dot.deprecated, .status-dot.offline {
+  background-color: var(--color-text-muted);
+}
+
+/* Status Badges */
+.badge,
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.badge-success, .badge-in_production, .badge-approved, .badge-passed, .badge-healthy, .badge-active,
+.status-success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-border);
+}
+
+.badge-warning, .badge-pending, .badge-pending_approval, .badge-warning-status,
+.status-warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
+}
+
+.badge-danger, .badge-failed, .badge-drift_detected, .badge-unacceptable, .badge-critical,
+.status-danger {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+}
+
+.badge-info, .badge-evaluation, .badge-under_review, .badge-staging,
+.status-info {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-border);
+}
+
+.badge-neutral, .badge-draft, .badge-deprecated, .badge-retired, .badge-not_deployed,
+.status-neutral {
+  background-color: var(--neutral-badge-bg);
+  color: var(--neutral-badge-text);
+  border: 1px solid var(--neutral-badge-border);
+}
+
+/* Risk Badges (Professional classification, no neon or pink) */
+.badge-unacceptable {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+  font-weight: 700;
+}
+
+.badge-high {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
+  font-weight: 700;
+}
+
+.badge-limited {
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-border);
+}
+
+.badge-minimal {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-border);
+}
+
+/* ─── 12. Enterprise Data Tables ─────────────────────────────────────────── */
+.table-container {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+th {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+}
+
+/* ─── 13. Buttons ────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.btn:active {
+  transform: scale(0.985);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: #ffffff;
+  border-color: var(--color-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-surface-secondary);
+  border-color: var(--color-border-strong);
+}
+
+.btn-danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
+  border-color: var(--color-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #a82e21;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-lg {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.btn-ghost {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+}
+
+/* ─── 14. Form Inputs & Controls ─────────────────────────────────────────── */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.form-input, .form-select, .form-textarea {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgba(49, 94, 251, 0.12);
+}
+
+.form-input::placeholder, .form-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ─── 15. Lifecycle Stepper ──────────────────────────────────────────────── */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin: 16px 0 24px;
+  padding: 0 8px;
+}
+
+.stepper::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 28px;
+  right: 28px;
+  height: 2px;
+  background-color: var(--color-border);
+  z-index: 1;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
+}
+
+.step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition: all var(--transition-fast);
+}
+
+.step-item.active .step-circle {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.step-item.completed .step-circle {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+  color: #ffffff;
+}
+
+.step-item.blocked .step-circle {
+  background-color: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #ffffff;
+}
+
+.step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.step-item.active .step-label {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+/* ─── 16. Modals & Drawers ───────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.modal-content {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-dropdown);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background-color: var(--color-surface-secondary);
+}
+
+/* Drawers */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-overlay);
+  z-index: 1040;
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-overlay);
+  z-index: 1040;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer-panel,
+.user-detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 92vw;
+  background-color: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-dropdown);
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  animation: drawerSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 1;
+}
+
+.drawer-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background-color: var(--color-surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background-color: var(--color-surface);
+}
+
+.drawer-section {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.drawer-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.drawer-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.drawer-kv-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.drawer-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.drawer-kv-label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.drawer-kv-value {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ─── 17. Regulatory Context Box ─────────────────────────────────────────── */
+.reg-notice {
+  background-color: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* ─── 18. Responsive Rules ───────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar {
+    width: 68px;
+  }
+  .brand-text, .nav-group-title, .nav-link-text, .sidebar-collapse-btn {
+    display: none;
+  }
+  .sidebar-footer {
+    padding: 8px 6px;
+  }
+  .sidebar-footer .user-info, .sidebar-footer .user-menu-chevron {
+    display: none;
+  }
+  .sidebar-footer .user-profile-card {
+    justify-content: center;
+    padding: 6px;
+  }
+  .main-content {
+    margin-left: 68px;
+  }
+  .brand {
+    justify-content: center;
+    padding: 0;
+  }
+  .nav-link {
+    justify-content: center;
+    padding: 10px;
+  }
+  .page-container {
+    padding: 20px 16px;
+  }
+}
