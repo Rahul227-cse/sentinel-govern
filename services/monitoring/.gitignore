@@ -1,0 +1,12 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Generated Evidently drift reports
+runtime_drift_report*.html
+drift_report.html

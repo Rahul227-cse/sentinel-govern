@@ -25,3 +25,20 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+runtime_drift_report*.html
+drift_report.html

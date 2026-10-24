@@ -1,0 +1,5 @@
+fastapi==0.142.4
+uvicorn[standard]==0.54.0
+pandas==3.0.6
+evidently==0.7.23
+scikit-learn==1.9.1
