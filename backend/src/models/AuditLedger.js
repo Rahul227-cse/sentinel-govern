@@ -32,8 +32,10 @@ const auditLedgerSchema = new mongoose.Schema({
     type: String, 
     enum: [
       'MODEL_CREATED',
+      'MODEL_CONFIG_UPDATED',
       'VERSION_CREATED',
       'LIFECYCLE_TRANSITION',
+      'GOVERNANCE_RECONCILIATION',
       'RISK_ASSESSED',
 
       'EVALUATION_COMPLETED',
@@ -43,6 +45,7 @@ const auditLedgerSchema = new mongoose.Schema({
       'POLICY_UPDATED',
       'MODEL_POLICY_ASSIGNED',
       'MODEL_POLICY_UNASSIGNED',
+      'NOTIFICATION_SENT',
       'APPROVAL_GRANTED',
       'APPROVAL_REJECTED',
       'DEPLOYMENT_STARTED',

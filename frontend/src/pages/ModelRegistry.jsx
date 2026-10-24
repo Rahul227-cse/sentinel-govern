@@ -17,6 +17,69 @@ import {
   X
 } from 'lucide-react';
 
+export const WORKLOAD_TEMPLATES = {
+  custom: {
+    id: 'custom',
+    label: 'Custom Model',
+    name: '',
+    modelType: 'CLASSIFICATION',
+    purpose: '',
+    description: '',
+    riskLevel: 'HIGH',
+    protectedAttributes: 'gender, age',
+    safetyImpactRating: 'High Significance (Annex III Section 5b)',
+    intendedUsers: 'Risk Analysts, ML Engineers'
+  },
+  fraud: {
+    id: 'fraud',
+    label: 'Real-Time Fraud Detection & Anomaly Intelligence',
+    name: 'Real-Time Fraud Detection & Anomaly Intelligence',
+    modelType: 'CLASSIFICATION',
+    purpose: 'Real-time retail transaction fraud scoring and synthetic anomaly detection',
+    description: 'Autonomous multi-tier transaction fraud classification and heuristic anomaly detection service.',
+    riskLevel: 'HIGH',
+    protectedAttributes: 'gender, age',
+    safetyImpactRating: 'High Significance (Annex III Section 5b)',
+    intendedUsers: 'Risk Analysts, Fraud Investigators'
+  },
+  creditRisk: {
+    id: 'creditRisk',
+    label: 'Credit Risk Scoring & Default Assessment',
+    name: 'Credit Risk Scoring & Default Assessment',
+    modelType: 'CLASSIFICATION',
+    purpose: 'Retail consumer lending creditworthiness scoring and automated decision recommendations',
+    description: 'LightGBM consumer default probability assessment API evaluating retail credit applicant risk.',
+    riskLevel: 'HIGH',
+    protectedAttributes: 'gender, age',
+    safetyImpactRating: 'High Significance (Annex III Section 5b Credit Scoring)',
+    intendedUsers: 'Credit Officers, Underwriters'
+  },
+  insurance: {
+    id: 'insurance',
+    label: 'Medical & Insurance Charges Predictor',
+    name: 'Medical & Insurance Charges Predictor',
+    modelType: 'REGRESSION',
+    purpose: 'Underwriting health insurance premium calculation and claim expenditure projections',
+    description: 'Medical and health insurance expenditure regressor predicting annual individual charges.',
+    riskLevel: 'LIMITED',
+    protectedAttributes: 'gender, age',
+    safetyImpactRating: 'Limited Significance (Actuarial Regression)',
+    intendedUsers: 'Actuaries, Underwriters'
+  },
+  churn: {
+    id: 'churn',
+    label: 'Customer Churn Retention Intelligence',
+    name: 'Customer Churn Retention Intelligence',
+    modelType: 'CLASSIFICATION',
+    purpose: 'Subscriber churn probability scoring for targeted customer success and retention actions',
+    description: 'Telco subscriber attrition intelligence platform with feature drift and explainability endpoints.',
+    riskLevel: 'LIMITED',
+    protectedAttributes: 'gender, age',
+    safetyImpactRating: 'Limited Significance (Customer Success Intelligence)',
+    intendedUsers: 'Retention Teams, Customer Success'
+  }
+};
+
 export default function ModelRegistry() {
   const { user } = useAuth();
   const capabilities = getRoleCapabilities(user?.role);
@@ -28,6 +91,7 @@ export default function ModelRegistry() {
   const [riskFilter, setRiskFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState('custom');
 
   // New Model Form State with Regulatory Risk Assessment
   const [formData, setFormData] = useState({
@@ -46,6 +110,43 @@ export default function ModelRegistry() {
     safetyImpactRating: 'High Significance (Annex III Section 5b)',
     autonomyLevel: 'Human-in-the-loop'
   });
+
+  const handleTemplateChange = (templateKey) => {
+    setSelectedTemplate(templateKey);
+    const tpl = WORKLOAD_TEMPLATES[templateKey] || WORKLOAD_TEMPLATES.custom;
+    setFormData((prev) => ({
+      ...prev,
+      name: tpl.name,
+      modelType: tpl.modelType,
+      purpose: tpl.purpose,
+      description: tpl.description,
+      riskLevel: tpl.riskLevel,
+      protectedAttributes: tpl.protectedAttributes,
+      safetyImpactRating: tpl.safetyImpactRating,
+      intendedUsers: tpl.intendedUsers
+    }));
+  };
+
+  const handleOpenModal = () => {
+    setSelectedTemplate('custom');
+    setFormData({
+      name: '',
+      description: '',
+      purpose: '',
+      owner: user?.name || user?.email || '',
+      team: user?.team || 'AI Platform',
+      modelType: 'CLASSIFICATION',
+      riskLevel: 'HIGH',
+      initialVersion: 'v1.0',
+      initialChangelog: 'Initial model baseline training and validation',
+      protectedAttributes: 'gender, age',
+      intendedUsers: 'Risk Analysts, ML Engineers',
+      prohibitedPracticesChecked: true,
+      safetyImpactRating: 'High Significance (Annex III Section 5b)',
+      autonomyLevel: 'Human-in-the-loop'
+    });
+    setIsModalOpen(true);
+  };
 
   const loadModels = async () => {
     try {
@@ -119,7 +220,7 @@ export default function ModelRegistry() {
           <RefreshCw size={14} /> Refresh
         </button>
         {capabilities.canCreateModels ? (
-          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary btn-sm">
+          <button onClick={handleOpenModal} className="btn btn-primary btn-sm">
             <Plus size={15} /> Register New Model
           </button>
         ) : (
@@ -313,6 +414,29 @@ export default function ModelRegistry() {
 
             <form onSubmit={handleCreate}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="workload-template-select">
+                    Select Workload Template
+                  </label>
+                  <select
+                    id="workload-template-select"
+                    className="form-select"
+                    value={selectedTemplate}
+                    onChange={(e) => handleTemplateChange(e.target.value)}
+                  >
+                    <option value="custom">Custom Model</option>
+                    <option value="fraud">Real-Time Fraud Detection &amp; Anomaly Intelligence</option>
+                    <option value="creditRisk">Credit Risk Scoring &amp; Default Assessment</option>
+                    <option value="insurance">Medical &amp; Insurance Charges Predictor</option>
+                    <option value="churn">Customer Churn Retention Intelligence</option>
+                  </select>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {selectedTemplate === 'custom'
+                      ? 'Manual intake mode: enter custom model architecture and regulatory parameters.'
+                      : 'Prefilled with standard workload architecture, regulatory tier, and system purpose. All fields remain editable.'}
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Model Name *</label>

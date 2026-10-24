@@ -14,7 +14,9 @@ test.before(async () => {
 
 test.after(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 });
 
 test('Audit Engine: Concurrent recordAuditEvent calls serialize safely without E11000 duplicate key race', async () => {

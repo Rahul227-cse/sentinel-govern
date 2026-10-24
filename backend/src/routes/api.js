@@ -66,6 +66,7 @@ router.post('/models', authenticateToken, requireActiveUser, requireVerifiedUser
 router.get('/models/:id', optionalAuth, modelCtrl.getModelById);
 router.patch('/models/:id/risk', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['GOVERNANCE_OFFICER', 'ML_LEAD']), modelCtrl.updateModelRisk);
 router.patch('/models/:id/policy', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('GOVERNANCE_OFFICER'), modelCtrl.updateModelPolicy);
+router.patch('/models/:id/endpoint', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.updateModelApiConfig);
 router.post('/models/:modelId/versions', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.createModelVersion);
 router.get('/models/:modelId/versions/compare', optionalAuth, modelCtrl.compareModelVersions);
 router.post('/models/versions/:versionId/transition', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.transitionLifecycle);
@@ -107,6 +108,10 @@ router.get('/incidents', optionalAuth, incidentCtrl.getIncidents);
 router.get('/incidents/:id', optionalAuth, incidentCtrl.getIncidentById);
 router.patch('/incidents/:id', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), incidentCtrl.updateIncidentStatus);
 router.post('/incidents/rollback', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), incidentCtrl.rollbackModel);
+
+// --- Notifications ---
+router.get('/notifications', optionalAuth, incidentCtrl.getNotifications);
+router.patch('/notifications/:id/read', optionalAuth, incidentCtrl.markNotificationRead);
 
 // --- Reports & Drift Analysis ---
 router.get('/reports', optionalAuth, reportCtrl.getReports);

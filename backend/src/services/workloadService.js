@@ -209,22 +209,44 @@ export async function checkWorkloadHealth(workloadId) {
 }
 
 /**
- * Checks health across all 4 workloads plus Evidently monitoring.
+ * Checks health for active workloads.
+ * For the interview walkthrough, only the local fraud-detection AI service is active.
+ * Other workloads (credit-risk, insurance, churn) are preserved in WORKLOAD_DEFINITIONS for future use
+ * but reported as INACTIVE / DEFERRED for this walkthrough.
  */
 export async function checkAllWorkloadsHealth() {
-  const [fraud, creditRisk, insurance, churn] = await Promise.all([
-    checkWorkloadHealth(WORKLOAD_IDS.FRAUD),
-    checkWorkloadHealth(WORKLOAD_IDS.CREDIT_RISK),
-    checkWorkloadHealth(WORKLOAD_IDS.INSURANCE),
-    checkWorkloadHealth(WORKLOAD_IDS.CHURN)
-  ]);
+  const fraud = await checkWorkloadHealth(WORKLOAD_IDS.FRAUD);
+
+  const creditRisk = {
+    workloadId: WORKLOAD_IDS.CREDIT_RISK,
+    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CREDIT_RISK].name,
+    status: 'INACTIVE',
+    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CREDIT_RISK].primaryUrl,
+    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
+  };
+
+  const insurance = {
+    workloadId: WORKLOAD_IDS.INSURANCE,
+    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.INSURANCE].name,
+    status: 'INACTIVE',
+    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.INSURANCE].primaryUrl,
+    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
+  };
+
+  const churn = {
+    workloadId: WORKLOAD_IDS.CHURN,
+    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CHURN].name,
+    status: 'INACTIVE',
+    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CHURN].primaryUrl,
+    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
+  };
 
   return {
     fraud,
     creditRisk,
     insurance,
     churn,
-    workloads: [fraud, creditRisk, insurance, churn]
+    workloads: [fraud] // Walkthrough exposes only the active local fraud workload
   };
 }
 
@@ -387,32 +409,36 @@ export function generateWorkloadSyntheticInputs(workloadId, { scenario = 'BASELI
   if (workloadId === WORKLOAD_IDS.FRAUD) {
     const baseTime = Date.now();
     for (let i = 0; i < safeCount; i++) {
-      const isAnomalous = scenario === 'DRIFTED' || (scenario === 'MIXED' && i % 3 === 0);
-      // For anomalous drift traffic, simulate a velocity burst attack on few users;
-      // For healthy baseline walkthrough traffic, distribute across distinct user accounts so internal velocity heuristics do not artificially trip.
+      // In DRIFTED or controlled shift: target ~40% drifted anomalous observations, ~60% healthy
+      const isAnomalous = scenario === 'DRIFTED' 
+        ? (i % 5 === 0 || i % 5 === 2) // ~40% rate (2 out of 5)
+        : (scenario === 'MIXED' ? (i % 4 === 0) : false);
+
       const userId = isAnomalous
-        ? `SYNTH_BURST_U${1000 + (i % 3)}`
-        : `SYNTH_U${100000 + (Math.floor(Date.now() / 60000) % 50000) + i * 13}`;
+        ? `SYNTH_BURST_U${1000 + (i % 2)}` // velocity concentration on 2 users
+        : `SYNTH_U${100000 + (Math.floor(Date.now() / 60000) % 50000) + i * 17}`;
       const timestamp = new Date(baseTime - (safeCount - i) * 60000).toISOString();
 
       if (isAnomalous) {
+        // Controlled feature shift specifically on amount ($1200 - $3500) and card_not_present channel
         inputs.push({
           user_id: userId,
-          amount: Number((1500 + Math.random() * 8500).toFixed(2)),
+          amount: Number((1200 + Math.random() * 2300).toFixed(2)),
           timestamp,
           channel: 'CARD_NOT_PRESENT',
-          country: ['NG', 'RO', 'RU', 'BR'][i % 4],
-          merchant_id: `SYNTH_M${9000 + (i % 10)}`,
-          device_id: `SYNTH_D${9000 + i}`,
+          country: ['IN', 'US', 'GB'][i % 3],
+          merchant_id: `SYNTH_M${9000 + (i % 4)}`,
+          device_id: `SYNTH_D${9000 + (i % 3)}`,
           isSyntheticWalkthroughTraffic: true
         });
       } else {
+        // Healthy baseline observations: amounts $25-$85, standard channels POS / UPI / Mobile
         inputs.push({
           user_id: userId,
-          amount: Number((15 + Math.random() * 45).toFixed(2)),
+          amount: Number((25 + Math.random() * 60).toFixed(2)),
           timestamp,
           channel: ['POS_SWIPE', 'MOBILE_APP', 'UPI_WALLET'][i % 3],
-          country: 'US',
+          country: 'IN',
           merchant_id: `SYNTH_M${1000 + (i % 5)}`,
           device_id: `SYNTH_D${1000 + (i % 8)}`,
           isSyntheticWalkthroughTraffic: true

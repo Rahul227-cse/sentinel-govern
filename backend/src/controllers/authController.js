@@ -24,17 +24,18 @@ function refreshCookieOptions(expiresAt) {
   return {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax'),
     path: '/api/auth',
     expires: expiresAt
   };
 }
 
 function clearCookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    secure: isProduction,
+    sameSite: process.env.COOKIE_SAMESITE || (isProduction ? 'none' : 'lax'),
     path: '/api/auth'
   };
 }

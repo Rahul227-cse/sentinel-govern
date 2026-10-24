@@ -4,9 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { formatRoleLabel } from '../utils/formatters';
 import GoogleSignInButton from './GoogleSignInButton';
 import ThemeToggle from './ThemeToggle';
-import { Shield, Menu, CheckCircle2, Clock } from 'lucide-react';
+import NotificationBell from './NotificationBell';
+import { Shield, CheckCircle2, Clock } from 'lucide-react';
 
-export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
+export default function Navbar() {
   const { currentRole, switchRole, roles } = useRole();
   const { user, isAuthenticated } = useAuth();
 
@@ -14,18 +15,6 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
     <header className="navbar" role="banner">
       {/* Left side: Context & Workspace Breadcrumb */}
       <div className="navbar-left">
-        {onToggleSidebar && (
-          <button
-            type="button"
-            className="sidebar-collapse-btn"
-            onClick={onToggleSidebar}
-            aria-label={isSidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <Menu size={17} />
-          </button>
-        )}
-
         <div className="navbar-workspace-context">
           <span className="navbar-workspace-name">Sentinel Govern</span>
           <span className="navbar-domain-divider">/</span>
@@ -43,6 +32,9 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed }) {
           <span className="status-dot healthy pulse" />
           <span>Policy Gates Active</span>
         </div>
+
+        {/* In-App Drift & Incident Notifications */}
+        <NotificationBell />
 
         {/* Theme Toggle (Light / Dark) */}
         <ThemeToggle />

@@ -37,11 +37,11 @@
 | **Audit Ledger** | SHA-256 Chained Hash & Tamper Detection | **VERIFIED WORKING** | Verified via `/audit/integrity` and `simulate-tamper` tests |
 | **Audit Ledger** | High-Concurrency Sequence Race Safety | **VERIFIED WORKING** | Sequential queue (`auditWriteQueue`) eliminates E11000 duplicate keys |
 | **Regulatory Dossier** | Full Technical Documentation Generation | **VERIFIED WORKING** | 10-section dossier compiled and exported to Markdown artifact |
-| **AI Workloads** | Fraud Detection AI (Local Port 8000) | **VERIFIED WORKING** | Live HTTP probe returns 200 OK (64ms latency) |
+| **AI Workloads** | Fraud Detection AI (Local Port 8000) | **ACTIVE WALKTHROUGH** | Live HTTP probe returns 200 OK (64ms); live `/score` verified |
 | **AI Workloads** | Evidently AI Monitoring (Local Port 8001) | **VERIFIED WORKING** | Live HTTP probe returns 200 OK; drift calculation verified |
-| **AI Workloads** | Credit Risk Scoring (Render HTTPS) | **VERIFIED WORKING** | Live HTTPS probe returns 200 OK (302ms latency) |
-| **AI Workloads** | Insurance Charges Predictor (Render HTTPS) | **VERIFIED WORKING** | Live HTTPS probe returns 200 OK (288ms latency) |
-| **AI Workloads** | Customer Churn Intelligence (Render HTTPS) | **BLOCKED BY CONFIGURATION** | Health endpoint accessible (200 OK); requires `CHURN_API_KEY` |
+| **AI Workloads** | Credit Risk, Insurance, Churn (Remote) | **DEFERRED (PRESERVED)** | Preserved in `WORKLOAD_DEFINITIONS`; deferred for interview walkthrough |
+| **Monitoring & Observability** | Single Workload Stream & Atlas-Style Visualizer | **VERIFIED WORKING** | Time-series SVG line chart, live observation summary, incident linkage |
+| **Alerts & Notification** | Persisted ML Lead Drift Notification Bell | **VERIFIED WORKING** | In-app bell dropdown with unread badge and automatic incident dispatch |
 | **Monitoring Scheduler** | Passive Observation vs Controlled Triggering | **VERIFIED WORKING** | Default `REAL` mode runs passively; controlled triggers work |
 
 ---

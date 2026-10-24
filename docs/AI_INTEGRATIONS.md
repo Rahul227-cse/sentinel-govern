@@ -10,12 +10,14 @@
 
 Sentinel Govern acts as an external, vendor-agnostic governance and observation control plane interfacing with microservices via HTTP/REST.
 
-| Workload ID | Name & Model Architecture | Primary Endpoint | Health Endpoint | Auth Requirements | Current Status |
+| Workload ID | Name & Model Architecture | Primary Endpoint | Health Endpoint | Auth Requirements | Walkthrough & System Status |
 |---|---|---|---|---|---|
-| `fraud-detection` | **Fraud Detection AI**<br/>FastAPI / Scikit-Learn Ensemble | `http://127.0.0.1:8000` | `/health` | None (Direct inference) | **VERIFIED WORKING** (200 OK, 64ms) |
-| `credit-risk` | **Credit Risk Scoring**<br/>LightGBM Consumer Credit Scorer | `https://credit-risk-scoring-58zh.onrender.com` | `/health` | None (Direct inference) | **VERIFIED WORKING** (200 OK, 302ms) |
-| `insurance-charges` | **Medical & Insurance Predictor**<br/>Gradient Boosting Regression API | `https://insurance-prediction-paiv.onrender.com` | `/` | None (Direct inference) | **VERIFIED WORKING** (200 OK, 288ms) |
-| `customer-churn` | **Customer Churn Retention Intelligence**<br/>Telco Subscriber Attrition API | `https://churn-prediction-mlops.onrender.com` | `/health` | Requires `CHURN_API_KEY` (`X-API-Key` header) | **BLOCKED BY CONFIGURATION** (Health check 200 OK; scoring blocked) |
+| `fraud-detection` | **Fraud Detection AI**<br/>FastAPI / Scikit-Learn Ensemble | `http://127.0.0.1:8000` | `/health` | None (Direct inference) | **ACTIVE WALKTHROUGH** (200 OK, verified live `/score`) |
+| `credit-risk` | **Credit Risk Scoring**<br/>LightGBM Consumer Credit Scorer | `https://credit-risk-scoring-58zh.onrender.com` | `/health` | None (Direct inference) | **DEFERRED** (Preserved architecture; inactive for walkthrough) |
+| `insurance-charges` | **Medical & Insurance Predictor**<br/>Gradient Boosting Regression API | `https://insurance-prediction-paiv.onrender.com` | `/` | None (Direct inference) | **DEFERRED** (Preserved architecture; inactive for walkthrough) |
+| `customer-churn` | **Customer Churn Retention Intelligence**<br/>Telco Subscriber Attrition API | `https://churn-prediction-mlops.onrender.com` | `/health` | Requires `CHURN_API_KEY` (`X-API-Key` header) | **DEFERRED** (Preserved architecture; inactive for walkthrough) |
+
+> **Walkthrough Scope Notice:** For the interview demonstration, only the local Fraud Detection AI is exposed as the active governed workload. The other three workloads remain fully preserved in code and architecture (`WORKLOAD_DEFINITIONS`) but are marked `INACTIVE` so as not to clutter the walkthrough with external network dependencies.
 
 ---
 
@@ -42,15 +44,21 @@ flowchart LR
 
 ---
 
-## 3. Background Monitoring Scheduler Modes
+## 3. Model API Endpoint Configuration & Notifications
+ 
+ ### 3.1 Server-Side Model API Endpoint Configuration
+- ML Leads can register and configure workload endpoints directly in the UI via `PATCH /api/models/:id/endpoint`.
+- The backend verifies endpoint reachability (`GET /health`) before storing the configuration in `Model.apiConfig`.
+- Credentials and headers remain strictly server-side.
+- The default endpoint preconfigures `http://127.0.0.1:8000` for the Fraud Detection AI service.
+### 3.2 Automated Drift Incident Notifications
+- When statistically significant drift is detected via Evidently ($p < 0.05$):
+  1. A structured `Incident` is generated with deduplication for existing open incidents.
+  2. A persisted `Notification` document (`Notification.js`) is automatically dispatched to the `ML_LEAD` role with type `DRIFT_INCIDENT`.
+  3. The in-app Notification Bell in the top navigation displays the unread badge and dropdown with direct links to the Incident Queue.
+  4. Audit ledger records `NOTIFICATION_SENT` and `INCIDENT_CREATED`.
 
-The background monitoring scheduler (`monitoringScheduler.js`) manages continuous observation across all registered workloads.
-
-1. **`REAL` Mode (Default Production Behavior):**
-   - The scheduler runs passively.
-   - It performs passive health checks and ingests incoming production traffic sent via `POST /api/telemetry/ingest`.
-   - It does not generate artificial synthetic batches or flood models with simulated transactions.
-2. **Controlled Manual Triggers:**
-   - Authorized operators (`ML_LEAD` or `PLATFORM_ADMIN`) can trigger controlled batches via `POST /api/telemetry/scheduler/trigger`.
-   - Supports explicit `BASELINE` or `DRIFTED` scenarios for verifying incident handling and automated deduplication.
-   - Requires administrative authorization or `x-sentinel-api-key`.
+### 3.3 Version Rollback Flow (v0 vs v1)
+- **Version v0 (Baseline):** Demonstrates controlled feature shift on `amount` ($1200–$3500) and `channel` (`CARD_NOT_PRESENT`), triggering a drift incident and ML Lead notification.
+- **Version v1 (Remediated):** Produces 100% in-distribution healthy observations ($25–$85, standard channels).
+- **Governed Rollback:** Only authorized `ML_LEAD` can trigger a rollback to an approved baseline version via `POST /api/incidents/rollback`. Retraining or promotion is never executed automatically.

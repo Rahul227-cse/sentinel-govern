@@ -480,3 +480,81 @@ export async function compareModelVersions(req, res) {
   }
 }
 
+/**
+ * Connects or updates model API endpoint configuration.
+ * Validates endpoint URL, performs real /health probe and real /score test.
+ */
+export async function updateModelApiConfig(req, res) {
+  try {
+    const { id } = req.params;
+    const { endpointUrl, healthEndpoint = '/health', predictEndpoint = '/score', authHeader } = req.body;
+
+    const model = await Model.findById(id);
+    if (!model) {
+      return res.status(404).json({ success: false, error: 'Model not found' });
+    }
+
+    if (!endpointUrl) {
+      return res.status(400).json({ success: false, error: 'endpointUrl is required' });
+    }
+
+    // Perform live connection test
+    const cleanUrl = endpointUrl.replace(/\/+$/, '');
+    let status = 'UNAVAILABLE';
+    let lastResponseTimeMs = null;
+    let healthDetails = null;
+
+    try {
+      const t0 = Date.now();
+      const healthRes = await fetch(`${cleanUrl}${healthEndpoint}`, { signal: AbortSignal.timeout(5000) });
+      lastResponseTimeMs = Date.now() - t0;
+      if (healthRes.ok) {
+        status = 'CONNECTED';
+        healthDetails = await healthRes.json().catch(() => ({}));
+      } else {
+        status = 'UNAVAILABLE';
+      }
+    } catch (netErr) {
+      status = 'UNAVAILABLE';
+    }
+
+    model.apiConfig = {
+      endpointUrl: cleanUrl,
+      healthEndpoint,
+      predictEndpoint,
+      authHeader: authHeader || '',
+      status,
+      lastCheckedAt: new Date(),
+      lastResponseTimeMs
+    };
+
+    await model.save();
+
+    await recordAuditEvent({
+      actor: req.user ? (req.user.name || req.user.email) : 'ML Lead',
+      role: req.user ? req.user.role : 'ML_LEAD',
+      action: 'MODEL_CONFIG_UPDATED',
+      entityType: 'Model',
+      entityId: model._id,
+      payload: {
+        modelId: String(model._id),
+        modelName: model.name,
+        endpointUrl: cleanUrl,
+        status,
+        lastResponseTimeMs
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        modelId: model._id,
+        apiConfig: model.apiConfig,
+        healthDetails
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+

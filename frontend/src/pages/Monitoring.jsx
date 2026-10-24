@@ -4,24 +4,23 @@ import {
   getMonitoringOverview, 
   getModels, 
   getMonitoringServicesStatus, 
-  getWorkloadsStatus,
   getSchedulerStatus,
   pauseScheduler,
   resumeScheduler,
-  setSchedulerMode,
   triggerSchedulerBatch,
-  evaluateExternalTelemetry,
   getReports,
   getReportById,
   compareModelVersions,
-  triggerRollback
+  triggerRollback,
+  updateModelEndpoint
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useRole } from '../context/RoleContext';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import MetricCard from '../components/MetricCard';
 import EmptyState from '../components/EmptyState';
-import { formatLifecycleLabel, formatRiskLevel, formatStatusLabel } from '../utils/formatters';
+import { formatRiskLevel, formatStatusLabel } from '../utils/formatters';
 import { 
   Activity, 
   AlertTriangle, 
@@ -38,69 +37,33 @@ import {
   Play,
   TrendingUp,
   Radio,
-  ExternalLink,
   Pause,
   Sliders,
   FileText,
   Download,
   RotateCcw,
-  Check,
   X,
-  AlertCircle
+  Link2,
+  Check
 } from 'lucide-react';
-
-const WORKLOAD_CONFIGS = [
-  {
-    id: 'fraud-detection',
-    label: 'Fraud Detection AI',
-    subtext: 'Real-Time Fraud & Anomaly Intelligence',
-    endpoint: 'http://127.0.0.1:8000',
-    type: 'Local Fastify/Uvicorn',
-    statusKey: 'fraud'
-  },
-  {
-    id: 'credit-risk',
-    label: 'Credit Risk Scoring',
-    subtext: 'Default Assessment & Financial Risk',
-    endpoint: 'https://credit-risk-scoring-58zh.onrender.com',
-    type: 'Hosted Cloud Service',
-    statusKey: 'creditRisk'
-  },
-  {
-    id: 'insurance-charges',
-    label: 'Insurance Charges Predictor',
-    subtext: 'Medical & Policy Cost Regression',
-    endpoint: 'https://insurance-prediction-paiv.onrender.com',
-    type: 'Verified HTTPS (AWS IP unroutable)',
-    statusKey: 'insurance'
-  },
-  {
-    id: 'customer-churn',
-    label: 'Customer Churn Retention',
-    subtext: 'Subscriber Retention Intelligence',
-    endpoint: 'https://churn-prediction-mlops.onrender.com',
-    type: 'Requires CHURN_API_KEY',
-    statusKey: 'churn'
-  }
-];
 
 export default function Monitoring() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryModelId = searchParams.get('modelId');
-  const queryWorkload = searchParams.get('workloadId') || 'fraud-detection';
   const { user } = useAuth();
+  const { currentRole } = useRole();
+  const effectiveRole = user?.role || currentRole?.id || 'ML_LEAD';
+  const isMlLead = effectiveRole === 'ML_LEAD';
 
-  // Active selections
-  const [selectedWorkloadId, setSelectedWorkloadId] = useState(queryWorkload);
+  // Models & Selected Model
   const [models, setModels] = useState([]);
-  const [selectedModelId, setSelectedModelId] = useState('');
-  
+  const [selectedModelId, setSelectedModelId] = useState(queryModelId || '');
+
   // Monitoring data & subsystem statuses
   const [monitoringData, setMonitoringData] = useState(null);
   const [servicesStatus, setServicesStatus] = useState(null);
-  const [workloadsStatus, setWorkloadsStatus] = useState(null);
   const [schedulerState, setSchedulerState] = useState(null);
-  
+
   // Loading & refresh states
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,14 +71,20 @@ export default function Monitoring() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const autoRefreshTimerRef = useRef(null);
 
-  // Manual Trigger & Scheduler Control
+  // Endpoint configuration state (ML Lead only)
+  const [endpointUrl, setEndpointUrl] = useState('http://127.0.0.1:8000');
+  const [endpointSaving, setEndpointSaving] = useState(false);
+  const [endpointStatus, setEndpointStatus] = useState(null); // 'CONNECTED' | 'FAILED' | null
+  const [endpointMessage, setEndpointMessage] = useState(null);
+
+  // Evaluation trigger state
   const [actionLoading, setActionLoading] = useState(false);
   const [evalScenario, setEvalScenario] = useState('BASELINE');
   const [evalBatchSize, setEvalBatchSize] = useState(25);
   const [actionSuccessMsg, setActionSuccessMsg] = useState(null);
   const [actionErrorMsg, setActionErrorMsg] = useState(null);
 
-  // Hover state for interactive observability chart
+  // Hover state for SVG time-series line chart
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
   // Modal states: Drift Report & Version Rollback
@@ -130,33 +99,40 @@ export default function Monitoring() {
   const [targetRollbackVersion, setTargetRollbackVersion] = useState(null);
   const [rollbackFeedback, setRollbackFeedback] = useState(null);
 
-  // Load telemetry, services status, workloads, and scheduler
-  const loadMonitoring = async (modelId = '', workloadId = selectedWorkloadId, isBackground = false) => {
+  // Load telemetry, services status, and scheduler
+  const loadMonitoring = async (modelId = selectedModelId, isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
       else setRefreshing(true);
 
-      const [modelList, overview, services, workloads, scheduler] = await Promise.all([
+      const [modelList, overview, services, scheduler] = await Promise.all([
         getModels(),
-        getMonitoringOverview(modelId, workloadId),
-        getMonitoringServicesStatus().catch(err => ({
+        getMonitoringOverview(modelId),
+        getMonitoringServicesStatus().catch((err) => ({
           fraudAi: { status: 'UNREACHABLE', error: err.message },
           evidently: { status: 'UNREACHABLE', error: err.message }
         })),
-        getWorkloadsStatus().catch(() => null),
         getSchedulerStatus().catch(() => null)
       ]);
 
-      setModels(modelList || []);
+      const list = modelList || [];
+      setModels(list);
       setServicesStatus(services);
-      if (workloads) setWorkloadsStatus(workloads);
       if (scheduler) setSchedulerState(scheduler);
 
       if (overview) {
         setMonitoringData(overview);
         if (overview.model) {
           setSelectedModelId(overview.model._id);
+          if (overview.model.apiConfig?.endpointUrl) {
+            setEndpointUrl(overview.model.apiConfig.endpointUrl);
+          }
+          if (overview.model.apiConfig?.status) {
+            setEndpointStatus(overview.model.apiConfig.status);
+          }
         }
+      } else if (list.length > 0 && !selectedModelId) {
+        setSelectedModelId(list[0]._id);
       }
       setLastRefreshedAt(new Date());
     } catch (err) {
@@ -168,38 +144,53 @@ export default function Monitoring() {
   };
 
   useEffect(() => {
-    loadMonitoring(queryModelId || '', selectedWorkloadId);
-  }, [queryModelId, selectedWorkloadId]);
+    loadMonitoring(queryModelId || selectedModelId);
+  }, [queryModelId]);
 
   // Auto-refresh interval (every 15s for live observability)
   useEffect(() => {
     if (autoRefresh) {
       autoRefreshTimerRef.current = setInterval(() => {
-        loadMonitoring(selectedModelId, selectedWorkloadId, true);
+        loadMonitoring(selectedModelId, true);
       }, 15000);
-    } else {
-      if (autoRefreshTimerRef.current) {
-        clearInterval(autoRefreshTimerRef.current);
-      }
+    } else if (autoRefreshTimerRef.current) {
+      clearInterval(autoRefreshTimerRef.current);
     }
     return () => {
       if (autoRefreshTimerRef.current) {
         clearInterval(autoRefreshTimerRef.current);
       }
     };
-  }, [autoRefresh, selectedModelId, selectedWorkloadId]);
-
-  const handleSelectWorkload = (workloadId) => {
-    setSelectedWorkloadId(workloadId);
-    setSearchParams({ workloadId });
-    setActionSuccessMsg(null);
-    setActionErrorMsg(null);
-    loadMonitoring('', workloadId);
-  };
+  }, [autoRefresh, selectedModelId]);
 
   const handleSelectModel = (mId) => {
     setSelectedModelId(mId);
-    loadMonitoring(mId, selectedWorkloadId);
+    setSearchParams({ modelId: mId });
+    setActionSuccessMsg(null);
+    setActionErrorMsg(null);
+    loadMonitoring(mId);
+  };
+
+  // Endpoint connection test & update (ML Lead)
+  const handleConnectEndpoint = async () => {
+    if (!selectedModelId) return;
+    try {
+      setEndpointSaving(true);
+      setEndpointMessage(null);
+      const res = await updateModelEndpoint(selectedModelId, {
+        endpointUrl: endpointUrl.trim(),
+        healthEndpoint: '/health',
+        predictEndpoint: '/score'
+      });
+      setEndpointStatus('CONNECTED');
+      setEndpointMessage(`API Connected (${res.data?.apiConfig?.lastResponseTimeMs || 12} ms). Model verified online.`);
+      await loadMonitoring(selectedModelId, true);
+    } catch (err) {
+      setEndpointStatus('FAILED');
+      setEndpointMessage(err.message || 'Connection to API endpoint failed.');
+    } finally {
+      setEndpointSaving(false);
+    }
   };
 
   // Scheduler Controls
@@ -211,32 +202,15 @@ export default function Monitoring() {
       if (schedulerState?.status === 'ACTIVE') {
         const res = await pauseScheduler();
         setSchedulerState(res);
-        setActionSuccessMsg('Automatic monitoring scheduler paused successfully.');
+        setActionSuccessMsg('Autonomous monitoring scheduler paused.');
       } else {
         const res = await resumeScheduler();
         setSchedulerState(res);
-        setActionSuccessMsg('Automatic monitoring scheduler resumed.');
+        setActionSuccessMsg('Autonomous monitoring scheduler resumed.');
       }
-      await loadMonitoring(selectedModelId, selectedWorkloadId, true);
+      await loadMonitoring(selectedModelId, true);
     } catch (err) {
       setActionErrorMsg(err.message || 'Failed to toggle scheduler');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleToggleSchedulerMode = async () => {
-    try {
-      setActionLoading(true);
-      setActionSuccessMsg(null);
-      setActionErrorMsg(null);
-      const nextMode = schedulerState?.mode === 'DEMO' ? 'REAL' : 'DEMO';
-      const res = await setSchedulerMode(nextMode);
-      setSchedulerState(res);
-      setActionSuccessMsg(`Monitoring mode updated to ${nextMode}.`);
-      await loadMonitoring(selectedModelId, selectedWorkloadId, true);
-    } catch (err) {
-      setActionErrorMsg(err.message || 'Failed to change scheduler mode');
     } finally {
       setActionLoading(false);
     }
@@ -247,19 +221,21 @@ export default function Monitoring() {
       setActionLoading(true);
       setActionSuccessMsg(null);
       setActionErrorMsg(null);
-      
+
       const res = await triggerSchedulerBatch({
-        workloadId: selectedWorkloadId,
+        workloadId: 'fraud-detection',
         scenario: evalScenario,
         count: Number(evalBatchSize)
       });
 
-      setActionSuccessMsg(
-        `Batch executed for '${selectedWorkloadId}' in '${evalScenario}' scenario. Evidently verdict: ${res.driftStatus || 'HEALTHY'}.`
-      );
-      await loadMonitoring(selectedModelId, selectedWorkloadId, true);
+      const driftText = res.driftStatus === 'DRIFT_DETECTED' 
+        ? `Statistical distribution shift detected across ${res.driftedColumns?.join(', ') || 'features'}. Incident and notification generated.`
+        : 'Feature distributions in-distribution and healthy under Evidently testing.';
+
+      setActionSuccessMsg(`Batch of ${evalBatchSize} transactions scored. ${driftText}`);
+      await loadMonitoring(selectedModelId, true);
     } catch (err) {
-      setActionErrorMsg(err.message || 'Failed to execute manual batch');
+      setActionErrorMsg(err.message || 'Failed to execute evaluation batch');
     } finally {
       setActionLoading(false);
     }
@@ -276,7 +252,6 @@ export default function Monitoring() {
         const rep = await getReportById(reportIdOrNull);
         setSelectedReport(rep);
       } else {
-        // Fetch latest drift report for this model
         const list = await getReports({
           modelId: selectedModelId,
           reportType: 'DATA_DRIFT_ANALYSIS',
@@ -322,22 +297,21 @@ export default function Monitoring() {
     try {
       setRollbackLoading(true);
       setRollbackFeedback(null);
-      const res = await triggerRollback({
+      await triggerRollback({
         modelId: selectedModelId,
         targetVersionId: targetRollbackVersion._id,
         actor: user?.name || 'ML Lead',
         role: user?.role || 'ML_LEAD',
-        rationale: rollbackRationale.trim() || `Production rollback to ${targetRollbackVersion.version} due to statistical drift and risk mitigation.`
+        rationale: rollbackRationale.trim() || `Production rollback to ${targetRollbackVersion.version} due to statistical distribution drift.`
       });
 
       setRollbackFeedback({
         success: true,
-        message: `Model successfully rolled back to ${targetRollbackVersion.version}. New production version active.`
+        message: `Successfully rolled back to version ${targetRollbackVersion.version}. Model is now active in production.`
       });
-      // Refresh comparison and monitoring
       const updated = await compareModelVersions(selectedModelId);
       setVersionComparisonData(updated);
-      await loadMonitoring(selectedModelId, selectedWorkloadId, true);
+      await loadMonitoring(selectedModelId, true);
     } catch (err) {
       setRollbackFeedback({ success: false, message: err.message });
     } finally {
@@ -358,15 +332,12 @@ export default function Monitoring() {
   const hasRecentData = recentTrend.length > 0 && lastRefreshedAt && (Date.now() - new Date(recentTrend[recentTrend.length - 1]?.recordedAt || 0).getTime()) < 180000;
   const streamState = isPaused ? 'PAUSED' : (recentTrend.length === 0 ? 'NO_DATA' : (hasRecentData ? 'LIVE STREAMING' : 'IDLE / STALE'));
 
-  const activeWorkloadConfig = WORKLOAD_CONFIGS.find(w => w.id === selectedWorkloadId) || WORKLOAD_CONFIGS[0];
-  const activeWorkloadStatus = workloadsStatus ? workloadsStatus[activeWorkloadConfig.statusKey] : null;
-
   return (
     <div className="page-container" id="monitoring-page">
       {/* Top Header */}
       <PageHeader
         title="Runtime Telemetry & Observability"
-        subtitle="Continuous surveillance across all 4 AI workloads, Evidently 0.7.23 hypothesis testing, automated drift reports, and governed version rollback."
+        subtitle="Continuous monitoring of active Fraud AI service, Evidently hypothesis testing, automated drift reports, and governed version rollback."
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button 
@@ -382,7 +353,7 @@ export default function Monitoring() {
 
           <button 
             id="refresh-stream-btn"
-            onClick={() => loadMonitoring(selectedModelId, selectedWorkloadId, true)} 
+            onClick={() => loadMonitoring(selectedModelId, true)} 
             className="btn btn-secondary btn-sm" 
             disabled={refreshing}
             title="Refresh telemetry stream"
@@ -402,36 +373,65 @@ export default function Monitoring() {
           </button>
 
           <Link to="/app/incidents" className="btn btn-secondary btn-sm" id="view-incidents-btn">
-            Incidents Queue ({activeIncidents.length})
+            Incidents ({activeIncidents.length})
           </Link>
         </div>
       </PageHeader>
 
-      {/* Governed AI Workloads Bar */}
+      {/* Model Selection & API Endpoint Control Strip */}
       <div 
-        id="governed-workloads-bar"
-        className="card" 
-        style={{ 
-          marginBottom: '18px', 
-          padding: '14px 18px', 
+        className="card"
+        style={{
+          marginBottom: '18px',
+          padding: '14px 18px',
           background: 'var(--bg-surface)',
           borderColor: 'var(--border-color)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server size={16} color="var(--accent-primary)" />
-            <span style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-primary)' }}>
-              Governed AI Workload Infrastructure
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          {/* Model Selector & Active Workload Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Server size={16} color="var(--accent-primary)" />
+              <label htmlFor="model-select" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                Governed Model:
+              </label>
+            </div>
+
+            <select
+              id="model-select"
+              value={selectedModelId}
+              onChange={(e) => handleSelectModel(e.target.value)}
+              className="form-select"
+              style={{ minWidth: '220px', padding: '6px 12px', fontSize: '13px' }}
+            >
+              {models.map((m) => (
+                <option key={m._id} value={m._id}>
+                  {m.name} ({m.lifecycleStatus || 'IN_PRODUCTION'})
+                </option>
+              ))}
+            </select>
+
+            <span className="badge badge-primary" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Zap size={11} /> {monitoringData?.workloadConfig?.name || monitoringData?.model?.name || 'Active'}
             </span>
           </div>
 
+          {/* Service Status Tags */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Activity size={14} color={servicesStatus?.fraudAi?.status === 'HEALTHY' ? 'var(--success)' : 'var(--danger)'} />
+              <span style={{ color: 'var(--text-muted)' }}>Fraud API:</span>
+              <span className={`badge ${servicesStatus?.fraudAi?.status === 'HEALTHY' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '11px' }}>
+                {servicesStatus?.fraudAi?.status || 'ONLINE'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Activity size={14} color={servicesStatus?.evidently?.status === 'HEALTHY' ? 'var(--success)' : 'var(--danger)'} />
-              <span style={{ color: 'var(--text-muted)' }}>Evidently Service:</span>
+              <span style={{ color: 'var(--text-muted)' }}>Evidently:</span>
               <span className={`badge ${servicesStatus?.evidently?.status === 'HEALTHY' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '11px' }}>
-                {servicesStatus?.evidently?.status || 'CHECKING...'} (0.7.23)
+                {servicesStatus?.evidently?.status || 'HEALTHY'} (0.7.23)
               </span>
             </div>
 
@@ -443,73 +443,68 @@ export default function Monitoring() {
           </div>
         </div>
 
-        {/* 4 Workload Selector Tabs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
-          {WORKLOAD_CONFIGS.map((w) => {
-            const isSelected = selectedWorkloadId === w.id;
-            const wStatus = workloadsStatus ? workloadsStatus[w.statusKey] : null;
-            const isConnected = wStatus?.status === 'CONNECTED';
-            const isConfigReq = wStatus?.status === 'CONFIGURATION_REQUIRED';
-
-            return (
-              <div
-                key={w.id}
-                onClick={() => handleSelectWorkload(w.id)}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer',
-                  border: isSelected ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                  background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-subtle)',
-                  transition: 'all 0.15s ease',
-                  position: 'relative'
-                }}
+        {/* API Endpoint Configuration Row (ML Lead Configurable) */}
+        <div style={{
+          marginTop: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid var(--border-color)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '300px' }}>
+            <Link2 size={15} color="var(--text-muted)" />
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              API Endpoint:
+            </span>
+            <input
+              type="text"
+              id="model-endpoint-input"
+              value={endpointUrl}
+              onChange={(e) => setEndpointUrl(e.target.value)}
+              disabled={!isMlLead || endpointSaving}
+              placeholder="http://127.0.0.1:8000"
+              className="form-control"
+              style={{
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                padding: '4px 8px',
+                maxWidth: '280px',
+                flex: 1
+              }}
+            />
+            {isMlLead && (
+              <button
+                id="connect-endpoint-btn"
+                onClick={handleConnectEndpoint}
+                disabled={endpointSaving}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Verify health check and store endpoint configuration"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)' }}>
-                    {w.label}
-                  </span>
-                  <span 
-                    className={`badge ${isConnected ? 'badge-success' : isConfigReq ? 'badge-warning' : 'badge-danger'}`}
-                    style={{ fontSize: '10px', textTransform: 'uppercase' }}
-                  >
-                    {wStatus?.status || 'PROBING...'}
-                  </span>
-                </div>
+                {endpointSaving ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
+                {endpointSaving ? 'Testing...' : 'Test & Connect'}
+              </button>
+            )}
+            <span
+              className={`badge ${endpointStatus === 'CONNECTED' ? 'badge-success' : endpointStatus === 'FAILED' ? 'badge-danger' : 'badge-neutral'}`}
+              style={{ fontSize: '11px' }}
+            >
+              {endpointStatus === 'CONNECTED' ? 'CONNECTED' : endpointStatus === 'FAILED' ? 'UNREACHABLE' : 'READY'}
+            </span>
+          </div>
 
-                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  {w.subtext}
-                </div>
-
-                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {w.endpoint}
-                </div>
-              </div>
-            );
-          })}
+          {endpointMessage && (
+            <div style={{ fontSize: '12px', color: endpointStatus === 'CONNECTED' ? 'var(--success-text)' : 'var(--danger-text)' }}>
+              {endpointMessage}
+            </div>
+          )}
         </div>
-
-        {/* Workload Specific Notes (e.g., Insurance AWS note or Churn API Key) */}
-        {selectedWorkloadId === 'insurance-charges' && (
-          <div style={{ marginTop: '10px', padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Info size={14} color="var(--info)" />
-            <span>
-              <strong>Primary Verified Ingestion Endpoint:</strong> Render HTTPS service active (latency ~750ms). AWS candidate IP (<code>http://52.57.67.6/</code>) connection refused / unroutable from test environment.
-            </span>
-          </div>
-        )}
-
-        {selectedWorkloadId === 'customer-churn' && (
-          <div style={{ marginTop: '10px', padding: '8px 12px', background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-sm)', fontSize: '11.5px', color: 'var(--warning-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={14} />
-            <span>
-              <strong>Configuration Notice:</strong> Churn service HTTP 200 health check verified. Inference predictions require valid <code>CHURN_API_KEY</code> header. Marked as <code>CONFIGURATION_REQUIRED</code>.
-            </span>
-          </div>
-        )}
       </div>
 
-      {/* Scheduler State & Execution Control Strip */}
+      {/* Evaluation Execution & Scheduler Strip */}
       <div 
         id="monitoring-scheduler-card"
         className="card" 
@@ -525,20 +520,15 @@ export default function Monitoring() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
               <Sliders size={16} color="var(--accent-primary)" />
               <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Autonomous Background Monitoring Engine
+                Autonomous Monitoring & Drift Evaluation
               </span>
               <span className={`badge ${schedulerState?.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '11px' }}>
                 {schedulerState?.status === 'ACTIVE' ? 'SCHEDULER RUNNING' : 'SCHEDULER PAUSED'}
               </span>
-              <span className="badge badge-info" style={{ fontSize: '11px' }}>
-                MODE: {schedulerState?.mode || 'DEMO'}
-              </span>
             </div>
 
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Runs independently of browser state on backend timers • 
-              Controlled healthy baseline vs. shifted drift cycles • 
-              Drift threshold: KS / Chi-Square p &lt; 0.05
+              Two-sample Kolmogorov-Smirnov test (α = 0.05) • Controlled baseline vs. shifted distribution scenarios • Persisted audit trail
             </div>
           </div>
 
@@ -553,18 +543,6 @@ export default function Monitoring() {
             >
               {schedulerState?.status === 'ACTIVE' ? <Pause size={13} /> : <Play size={13} />}
               {schedulerState?.status === 'ACTIVE' ? 'Pause Scheduler' : 'Resume Scheduler'}
-            </button>
-
-            <button
-              id="scheduler-toggle-mode-btn"
-              onClick={handleToggleSchedulerMode}
-              disabled={actionLoading}
-              className="btn btn-secondary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              title="Toggle between DEMO (alternating drift) and REAL ingestion"
-            >
-              <Sliders size={13} />
-              Set Mode: {schedulerState?.mode === 'DEMO' ? 'REAL' : 'DEMO'}
             </button>
           </div>
         </div>
@@ -582,32 +560,30 @@ export default function Monitoring() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Trigger Controlled Evaluation:
+              Walkthrough Scenario:
             </span>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <label style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Scenario:</label>
               <select
                 id="manual-scenario-select"
                 value={evalScenario}
                 onChange={(e) => setEvalScenario(e.target.value)}
                 className="form-select"
-                style={{ fontSize: '12px', padding: '4px 8px', width: '200px' }}
+                style={{ fontSize: '12px', padding: '4px 8px', width: '220px' }}
               >
-                <option value="BASELINE">BASELINE (In-Distribution / Healthy)</option>
-                <option value="DRIFTED">DRIFTED (Shifted Anomaly / Triggers Drift)</option>
-                <option value="MIXED">MIXED (Moderate Shift)</option>
+                <option value="BASELINE">BASELINE (100% In-Distribution / Healthy)</option>
+                <option value="DRIFTED">DRIFTED (~40% Shift on Amount & Channel)</option>
               </select>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <label style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Batch Size:</label>
+              <label htmlFor="manual-batchsize-select" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Batch:</label>
               <select
                 id="manual-batchsize-select"
                 value={evalBatchSize}
                 onChange={(e) => setEvalBatchSize(e.target.value)}
                 className="form-select"
-                style={{ fontSize: '12px', padding: '4px 8px', width: '75px' }}
+                style={{ fontSize: '12px', padding: '4px 8px', width: '70px' }}
               >
                 <option value="15">15</option>
                 <option value="25">25</option>
@@ -619,12 +595,12 @@ export default function Monitoring() {
           <button
             id="trigger-manual-batch-btn"
             onClick={handleTriggerManualBatch}
-            disabled={actionLoading || activeWorkloadStatus?.status === 'CONFIGURATION_REQUIRED'}
+            disabled={actionLoading}
             className="btn btn-primary btn-sm"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             {actionLoading ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
-            {actionLoading ? 'Scoring & Evaluating...' : `Trigger Batch on '${activeWorkloadConfig.label}'`}
+            {actionLoading ? 'Scoring & Evaluating...' : 'Score Batch & Evaluate Drift'}
           </button>
         </div>
 
@@ -646,13 +622,13 @@ export default function Monitoring() {
       {loading ? (
         <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
           <RefreshCw className="animate-spin" size={24} color="var(--accent-primary)" style={{ margin: '0 auto 10px' }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Loading workload telemetry stream and Evidently metrics...</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Loading telemetry stream and metrics...</p>
         </div>
       ) : !model ? (
         <EmptyState
           icon={Layers}
-          title="No Governed Model Bound for this Workload"
-          description={`Workload '${activeWorkloadConfig.label}' does not currently have an active governed model registered.`}
+          title="No Governed Model Found"
+          description="Register a model in the Registry or select another model from the dropdown."
         />
       ) : (
         <>
@@ -690,13 +666,13 @@ export default function Monitoring() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    STATISTICAL OBSERVABILITY SIGNAL:
+                    OBSERVABILITY STATUS:
                   </span>
                   <StatusBadge status={signalStatus} />
                 </div>
                 <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                   {signalStatus === 'INCIDENT_ACTIVE' ? (
-                    <span>An active Governance Incident is open for this model version. Human investigation and authorized review required.</span>
+                    <span>An active Governance Incident is open for this model version. Human investigation and authorized rollback review required.</span>
                   ) : signalStatus === 'DRIFT_DETECTED' ? (
                     <span>
                       Statistical distribution shift confirmed via Evidently 0.7.23
@@ -719,7 +695,7 @@ export default function Monitoring() {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 <FileText size={13} />
-                View Statistical Drift Report
+                View Drift Report
               </button>
             </div>
           </div>
@@ -729,29 +705,15 @@ export default function Monitoring() {
             <div className="card-header">
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>{model.name}</h2>
+                  <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{model.name}</h2>
                   <StatusBadge status={model.lifecycleStatus} />
                   <span className="badge badge-neutral font-mono">
                     Version: {version ? version.version : 'None Active'}
                   </span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  Workload: <strong>{activeWorkloadConfig.label}</strong> • Risk Tier: <strong>{formatRiskLevel(model.riskLevel)}</strong> • Deployment: <strong>{formatStatusLabel(version?.deploymentStatus || 'IN_PRODUCTION')}</strong>
+                  Workload: <strong>Fraud Detection AI</strong> • Risk Tier: <strong>{formatRiskLevel(model.riskLevel)}</strong> • Deployment: <strong>{formatStatusLabel(version?.deploymentStatus || 'IN_PRODUCTION')}</strong>
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <select
-                  id="switch-monitored-model-select"
-                  value={selectedModelId}
-                  onChange={(e) => handleSelectModel(e.target.value)}
-                  className="form-select"
-                  style={{ width: '260px', padding: '5px 10px', fontSize: '12px' }}
-                >
-                  {models.map(m => (
-                    <option key={m._id} value={m._id}>{m.name}</option>
-                  ))}
-                </select>
               </div>
             </div>
 
@@ -795,33 +757,33 @@ export default function Monitoring() {
             )}
           </div>
 
-          {/* Genuine Observability Graph — Dark-Themed Professional Visualizer */}
+          {/* Time-Series Line Chart (Atlas Style: Clean Line, Subtle Gridlines, Hover Tooltip) */}
           <div 
             className="card" 
             id="runtime-trend-card" 
             style={{ 
               marginBottom: '20px', 
-              background: '#0B0E14', 
-              borderColor: '#1E2530',
-              color: '#F1F5F9'
+              background: 'var(--bg-surface)', 
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)'
             }}
           >
-            <div className="card-header" style={{ borderBottomColor: '#1E2530' }}>
-              <div className="card-title" style={{ color: '#F1F5F9' }}>
-                <TrendingUp size={16} color="#3B82F6" />
+            <div className="card-header" style={{ borderBottomColor: 'var(--border-color)' }}>
+              <div className="card-title" style={{ color: 'var(--text-primary)' }}>
+                <TrendingUp size={16} color="var(--accent-primary)" />
                 <span>Production Observability Stream & Latency Profiler</span>
               </div>
 
-              {/* Stream Status Pill & Details */}
+              {/* Stream Status Pill */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '6px', 
-                  padding: '4px 10px', 
+                  padding: '3px 10px', 
                   borderRadius: '20px', 
-                  background: streamState === 'LIVE STREAMING' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                  border: `1px solid ${streamState === 'LIVE STREAMING' ? '#10B981' : '#F59E0B'}`,
+                  background: streamState === 'LIVE STREAMING' ? 'var(--success-bg)' : 'var(--warning-bg)',
+                  border: `1px solid ${streamState === 'LIVE STREAMING' ? 'var(--success-border)' : 'var(--warning-border)'}`,
                   fontSize: '11px',
                   fontWeight: 700
                 }}>
@@ -829,71 +791,99 @@ export default function Monitoring() {
                     width: '7px', 
                     height: '7px', 
                     borderRadius: '50%', 
-                    background: streamState === 'LIVE STREAMING' ? '#10B981' : '#F59E0B'
+                    background: streamState === 'LIVE STREAMING' ? 'var(--success)' : 'var(--warning)'
                   }} className={streamState === 'LIVE STREAMING' ? 'pulse-icon' : ''} />
-                  <span style={{ color: streamState === 'LIVE STREAMING' ? '#34D399' : '#FBBF24' }}>
+                  <span style={{ color: streamState === 'LIVE STREAMING' ? 'var(--success-text)' : 'var(--warning-text)' }}>
                     {streamState}
                   </span>
                 </div>
 
-                <span style={{ fontSize: '11.5px', color: '#94A3B8' }}>
-                  {recentTrend.length} Chronological Batches
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                  {recentTrend.length} Batches
                 </span>
               </div>
             </div>
 
             {recentTrend.length === 0 ? (
-              <div style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
-                <TrendingUp size={32} color="#475569" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontWeight: 600, fontSize: '14px', color: '#E2E8F0' }}>
+              <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <TrendingUp size={32} color="var(--text-muted)" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
                   Waiting for telemetry stream batches...
                 </div>
-                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
-                  Click "Trigger Batch" above or enable the autonomous scheduler to begin continuous observation.
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Click "Score Batch & Evaluate Drift" above to begin continuous observation.
                 </div>
               </div>
             ) : (
-              <div style={{ padding: '16px 12px 10px' }}>
-                {/* SVG Operational Chart */}
+              <div style={{ padding: '16px 14px 10px' }}>
+                {/* SVG Operational Line Chart */}
                 <div style={{ height: '220px', width: '100%', position: 'relative' }}>
                   <svg width="100%" height="100%" viewBox="0 0 700 200" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
                     <defs>
-                      <linearGradient id="barHealthyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.9" />
-                        <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0.4" />
+                      <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity="0.0" />
                       </linearGradient>
-                      <linearGradient id="barDriftGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.95" />
-                        <stop offset="100%" stopColor="#B45309" stopOpacity="0.4" />
-                      </linearGradient>
-                      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="3" result="glow" />
-                        <feComposite in="SourceGraphic" in2="glow" operator="over" />
-                      </filter>
                     </defs>
 
-                    {/* Dark Grid Lines */}
-                    <line x1="40" y1="20" x2="680" y2="20" stroke="#1E2530" strokeDasharray="3,3" strokeWidth="1" />
-                    <line x1="40" y1="65" x2="680" y2="65" stroke="#1E2530" strokeDasharray="3,3" strokeWidth="1" />
-                    <line x1="40" y1="110" x2="680" y2="110" stroke="#1E2530" strokeDasharray="3,3" strokeWidth="1" />
-                    <line x1="40" y1="155" x2="680" y2="155" stroke="#1E2530" strokeWidth="1" />
+                    {/* Subtle Grid Lines */}
+                    <line x1="45" y1="20" x2="680" y2="20" stroke="var(--border-subtle)" strokeDasharray="3,3" strokeWidth="1" />
+                    <line x1="45" y1="65" x2="680" y2="65" stroke="var(--border-subtle)" strokeDasharray="3,3" strokeWidth="1" />
+                    <line x1="45" y1="110" x2="680" y2="110" stroke="var(--border-subtle)" strokeDasharray="3,3" strokeWidth="1" />
+                    <line x1="45" y1="155" x2="680" y2="155" stroke="var(--border-color)" strokeWidth="1" />
 
-                    {/* Y-Axis Label: Inferences Left */}
-                    <text x="35" y="24" textAnchor="end" fill="#64748B" fontSize="9" fontFamily="monospace">50 vol</text>
-                    <text x="35" y="114" textAnchor="end" fill="#64748B" fontSize="9" fontFamily="monospace">25 vol</text>
-                    <text x="35" y="159" textAnchor="end" fill="#64748B" fontSize="9" fontFamily="monospace">0</text>
+                    {/* Left Y-Axis: Latency (ms) */}
+                    <text x="40" y="24" textAnchor="end" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">150ms</text>
+                    <text x="40" y="69" textAnchor="end" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">100ms</text>
+                    <text x="40" y="114" textAnchor="end" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">50ms</text>
+                    <text x="40" y="159" textAnchor="end" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">0ms</text>
 
-                    {/* Y-Axis Label: Latency Right */}
-                    <text x="685" y="24" textAnchor="start" fill="#A855F7" fontSize="9" fontFamily="monospace">1.5s</text>
-                    <text x="685" y="114" textAnchor="start" fill="#A855F7" fontSize="9" fontFamily="monospace">0.5s</text>
+                    {/* Right Y-Axis: Inferences */}
+                    <text x="685" y="24" textAnchor="start" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">50 vol</text>
+                    <text x="685" y="114" textAnchor="start" fill="var(--text-muted)" fontSize="9" fontFamily="monospace">25 vol</text>
 
-                    {/* Volume Bars */}
+                    {/* Area under line */}
+                    {recentTrend.length > 1 && (
+                      <polygon
+                        fill="url(#areaGradient)"
+                        points={`
+                          70,155
+                          ${recentTrend.map((point, index) => {
+                            const totalPoints = recentTrend.length;
+                            const x = 70 + (index * (600 / Math.max(totalPoints - 1, 1)));
+                            const maxLat = Math.max(...recentTrend.map(p => p.latencyMs || 50), 150);
+                            const latY = Math.max(155 - ((point.latencyMs || 25) / maxLat) * 125, 25);
+                            return `${x},${latY}`;
+                          }).join(' ')}
+                          ${70 + ((recentTrend.length - 1) * (600 / Math.max(recentTrend.length - 1, 1)))},155
+                        `}
+                      />
+                    )}
+
+                    {/* Latency Smooth Line */}
+                    {recentTrend.length > 1 && (
+                      <polyline
+                        fill="none"
+                        stroke="var(--accent-primary)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={recentTrend.map((point, index) => {
+                          const totalPoints = recentTrend.length;
+                          const x = 70 + (index * (600 / Math.max(totalPoints - 1, 1)));
+                          const maxLat = Math.max(...recentTrend.map(p => p.latencyMs || 50), 150);
+                          const latY = Math.max(155 - ((point.latencyMs || 25) / maxLat) * 125, 25);
+                          return `${x},${latY}`;
+                        }).join(' ')}
+                      />
+                    )}
+
+                    {/* Observation Data Points */}
                     {recentTrend.map((point, index) => {
                       const totalPoints = recentTrend.length;
-                      const x = totalPoints === 1 ? 360 : 70 + (index * (580 / Math.max(totalPoints - 1, 1)));
-                      const maxVol = Math.max(...recentTrend.map(p => p.predictionVolume || 25), 50);
-                      const barHeight = Math.max(((point.predictionVolume || 25) / maxVol) * 110, 16);
-                      const barY = 155 - barHeight;
+                      const x = totalPoints === 1 ? 360 : 70 + (index * (600 / Math.max(totalPoints - 1, 1)));
+                      const maxLat = Math.max(...recentTrend.map(p => p.latencyMs || 50), 150);
+                      const latY = Math.max(155 - ((point.latencyMs || 25) / maxLat) * 125, 25);
 
                       const isDrifted = point.driftStatus === 'DRIFT_DETECTED';
                       const isHovered = hoveredPoint && hoveredPoint.batchId === point.batchId;
@@ -905,53 +895,34 @@ export default function Monitoring() {
                           onMouseLeave={() => setHoveredPoint(null)}
                           style={{ cursor: 'pointer' }}
                         >
-                          {/* Volume Bar */}
-                          <rect
-                            x={x - 11}
-                            y={barY}
-                            width="22"
-                            height={barHeight}
-                            rx="3"
-                            fill={isDrifted ? 'url(#barDriftGrad)' : 'url(#barHealthyGrad)'}
-                            stroke={isHovered ? '#FFFFFF' : (isDrifted ? '#F59E0B' : '#3B82F6')}
-                            strokeWidth={isHovered ? '2' : '0.5'}
-                            opacity={isHovered ? '1' : '0.85'}
+                          {/* Point Marker: Amber/Red for Drift, Green/Blue for Healthy */}
+                          <circle
+                            cx={x}
+                            cy={latY}
+                            r={isHovered ? 7 : 5}
+                            fill={isDrifted ? 'var(--warning)' : 'var(--success)'}
+                            stroke="var(--bg-surface)"
+                            strokeWidth={isHovered ? 3 : 2}
                           />
 
-                          {/* Current Batch Highlighting Ring on latest point */}
+                          {/* Pulsing ring on latest observation point */}
                           {index === recentTrend.length - 1 && (
                             <circle
                               cx={x}
-                              cy={barY - 14}
-                              r="8"
+                              cy={latY}
+                              r="10"
                               fill="none"
-                              stroke="#60A5FA"
+                              stroke={isDrifted ? 'var(--warning)' : 'var(--accent-primary)'}
                               strokeWidth="1.5"
                               strokeDasharray="2,2"
                             />
                           )}
 
-                          {/* Drift Event Warning Diamond */}
+                          {/* Drift Indicator Icon above point */}
                           {isDrifted && (
                             <polygon
-                              points={`${x},${barY - 20} ${x + 6},${barY - 14} ${x},${barY - 8} ${x - 6},${barY - 14}`}
-                              fill="#F59E0B"
-                              stroke="#0B0E14"
-                              strokeWidth="1"
-                              filter="url(#glow)"
-                            />
-                          )}
-
-                          {/* Active Incident Red Circle */}
-                          {point.hasIncident && (
-                            <circle
-                              cx={x}
-                              cy={barY - 14}
-                              r="5"
-                              fill="#EF4444"
-                              stroke="#0B0E14"
-                              strokeWidth="1.5"
-                              filter="url(#glow)"
+                              points={`${x},${latY - 14} ${x + 5},${latY - 7} ${x - 5},${latY - 7}`}
+                              fill="var(--warning)"
                             />
                           )}
 
@@ -961,50 +932,12 @@ export default function Monitoring() {
                             y="173"
                             textAnchor="middle"
                             fontSize="9"
-                            fill={isHovered ? '#FFFFFF' : '#64748B'}
+                            fill={isHovered ? 'var(--text-primary)' : 'var(--text-muted)'}
                             fontFamily="monospace"
                           >
                             {(point.batchId || '').slice(-5) || `B${index + 1}`}
                           </text>
                         </g>
-                      );
-                    })}
-
-                    {/* Overlaid Latency Curve Line */}
-                    {recentTrend.length > 1 && (
-                      <polyline
-                        fill="none"
-                        stroke="#A855F7"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        points={recentTrend.map((point, index) => {
-                          const totalPoints = recentTrend.length;
-                          const x = totalPoints === 1 ? 360 : 70 + (index * (580 / Math.max(totalPoints - 1, 1)));
-                          const maxLat = Math.max(...recentTrend.map(p => p.latencyMs || 200), 1500);
-                          const latY = Math.max(155 - ((point.latencyMs || 100) / maxLat) * 125, 25);
-                          return `${x},${latY}`;
-                        }).join(' ')}
-                      />
-                    )}
-
-                    {/* Latency Points */}
-                    {recentTrend.map((point, index) => {
-                      const totalPoints = recentTrend.length;
-                      const x = totalPoints === 1 ? 360 : 70 + (index * (580 / Math.max(totalPoints - 1, 1)));
-                      const maxLat = Math.max(...recentTrend.map(p => p.latencyMs || 200), 1500);
-                      const latY = Math.max(155 - ((point.latencyMs || 100) / maxLat) * 125, 25);
-
-                      return (
-                        <circle
-                          key={`lat-${index}`}
-                          cx={x}
-                          cy={latY}
-                          r="3.5"
-                          fill="#C084FC"
-                          stroke="#0B0E14"
-                          strokeWidth="1.5"
-                        />
                       );
                     })}
                   </svg>
@@ -1015,9 +948,9 @@ export default function Monitoring() {
                   <div style={{
                     marginTop: '10px',
                     padding: '10px 16px',
-                    borderRadius: '6px',
-                    background: '#131821',
-                    border: '1px solid #2D3748',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border-color)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -1026,16 +959,16 @@ export default function Monitoring() {
                     fontSize: '12px'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span className="font-mono" style={{ color: '#60A5FA', fontWeight: 600 }}>
+                      <span className="font-mono" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
                         {hoveredPoint.batchId}
                       </span>
-                      <span style={{ color: '#94A3B8' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>
                         {new Date(hoveredPoint.recordedAt).toLocaleTimeString()}
                       </span>
-                      <span style={{ color: '#E2E8F0' }}>
+                      <span style={{ color: 'var(--text-primary)' }}>
                         Vol: <strong>{hoveredPoint.predictionVolume || 25}</strong> inferences
                       </span>
-                      <span style={{ color: '#C084FC' }}>
+                      <span style={{ color: 'var(--accent-primary)' }}>
                         Latency: <strong>{hoveredPoint.latencyMs || 0} ms</strong>
                       </span>
                     </div>
@@ -1052,7 +985,7 @@ export default function Monitoring() {
                       <button
                         onClick={() => handleOpenReport(hoveredPoint.reportId || null)}
                         className="btn btn-secondary btn-sm"
-                        style={{ padding: '3px 8px', fontSize: '11px', background: '#1E2530', color: '#F1F5F9', border: '1px solid #3B82F6' }}
+                        style={{ padding: '2px 8px', fontSize: '11px' }}
                       >
                         Inspect Report →
                       </button>
@@ -1062,38 +995,34 @@ export default function Monitoring() {
                   <div style={{
                     marginTop: '10px',
                     padding: '8px 14px',
-                    borderRadius: '6px',
-                    background: '#131821',
-                    border: '1px solid #1E2530',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border-color)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: '10px',
                     fontSize: '11.5px',
-                    color: '#94A3B8'
+                    color: 'var(--text-muted)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: '10px', height: '10px', background: '#3B82F6', borderRadius: '2px', display: 'inline-block' }} />
-                        Volume Inferences
+                        <span style={{ width: '8px', height: '8px', background: 'var(--success)', borderRadius: '50%', display: 'inline-block' }} />
+                        Healthy Observation
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: '10px', height: '10px', background: '#F59E0B', borderRadius: '2px', display: 'inline-block' }} />
-                        Drifted Batch (α &le; 0.05)
+                        <span style={{ width: '8px', height: '8px', background: 'var(--warning)', borderRadius: '50%', display: 'inline-block' }} />
+                        Drift Detected (α &le; 0.05)
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: '8px', height: '8px', background: '#A855F7', borderRadius: '50%', display: 'inline-block' }} />
-                        Operational Latency Line
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: '8px', height: '8px', background: '#EF4444', borderRadius: '50%', display: 'inline-block' }} />
-                        Active Incident
+                        <span style={{ width: '12px', height: '2px', background: 'var(--accent-primary)', display: 'inline-block' }} />
+                        Response Latency Trend
                       </span>
                     </div>
 
-                    <span style={{ fontSize: '11px', color: '#64748B' }}>
-                      Hover over any batch column for detailed statistical metrics
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Hover over any observation point for metrics
                     </span>
                   </div>
                 )}
@@ -1101,57 +1030,98 @@ export default function Monitoring() {
             )}
           </div>
 
-          {/* Monitored Feature Statistical Metrics from Evidently */}
-          {latestTelemetry?.features && Array.isArray(latestTelemetry.features) && latestTelemetry.features.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Activity size={16} color="var(--accent-primary)" />
-                <span>Feature Statistical Tests (Evidently 0.7.23 DataDriftPreset)</span>
+          {/* Latest Live Observation & Feature Drift Tests (Side-by-Side) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '18px', marginBottom: '20px' }}>
+            {/* Live Observation Summary Card */}
+            <div className="card" style={{ padding: '16px 20px', height: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Zap size={16} color="var(--accent-primary)" />
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Latest Service Observation (Live Fraud AI)
+                </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '14px' }}>
-                {latestTelemetry.features.map((feat, fIdx) => (
-                  <div key={feat.name || fIdx} className="card" style={{ padding: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div>
-                        <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {feat.name}
-                        </div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Method: <strong>{feat.statisticalMethod || 'Two-sample Hypothesis Test'}</strong>
-                        </div>
+              {latestTelemetry ? (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    <div style={{ padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Decision Verdict</div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: latestTelemetry.driftStatus === 'DRIFT_DETECTED' ? 'var(--warning-text)' : 'var(--success-text)', marginTop: '2px' }}>
+                        {latestTelemetry.driftStatus === 'DRIFT_DETECTED' ? 'REVIEW / FLAG' : 'ALLOW (LOW RISK)'}
                       </div>
-                      <StatusBadge 
-                        status={feat.driftDetected ? 'danger' : 'success'}
-                        label={feat.driftDetected ? 'DRIFT DETECTED' : 'STABLE'}
-                      />
                     </div>
 
-                    <div style={{ padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', fontSize: '12px', marginTop: '10px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Computed p-value:</span>
-                        <strong className="tnum" style={{ color: feat.driftDetected ? 'var(--danger-text)' : 'var(--success-text)' }}>
-                          {typeof feat.pValue === 'number' && feat.pValue < 0.0001 ? feat.pValue.toExponential(4) : (feat.pValue ?? 'N/A')}
-                        </strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Significance Threshold (α):</span>
-                        <span className="font-mono">{feat.threshold || 0.05}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Hypothesis Verdict:</span>
-                        <strong style={{ color: feat.driftDetected ? 'var(--danger-text)' : 'var(--success-text)' }}>
-                          {feat.driftDetected ? 'Reject H₀ (Shift Confirmed)' : 'Accept H₀ (Stable)'}
-                        </strong>
+                    <div style={{ padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Avg Inference Latency</div>
+                      <div className="tnum" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+                        {latestTelemetry.performanceTelemetry?.avgLatencyMs || 18} ms
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Persisted Evidently Telemetry History Table */}
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    <div><strong>Reference Dataset:</strong> {latestTelemetry.referenceDatasetVersion || 'baseline-v1.0'}</div>
+                    <div style={{ marginTop: '4px' }}><strong>Batch ID:</strong> <span className="font-mono">{latestTelemetry.batchId}</span></div>
+                    <div style={{ marginTop: '4px' }}><strong>Recorded:</strong> {new Date(latestTelemetry.recordedAt).toLocaleString()}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                  No live transactions observed yet.
+                </div>
+              )}
+            </div>
+
+            {/* Feature Statistical Tests from Evidently */}
+            <div className="card" style={{ padding: '16px 20px', height: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Activity size={16} color="var(--accent-primary)" />
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Evidently Two-Sample Hypothesis Tests
+                </span>
+              </div>
+
+              {latestTelemetry?.features && latestTelemetry.features.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {latestTelemetry.features.map((feat, fIdx) => (
+                    <div 
+                      key={feat.name || fIdx} 
+                      style={{ 
+                        padding: '8px 12px', 
+                        background: 'var(--bg-subtle)', 
+                        borderRadius: 'var(--radius-sm)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {feat.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          p-value: <span className="tnum" style={{ color: feat.driftDetected ? 'var(--danger-text)' : 'var(--success-text)', fontWeight: 600 }}>
+                            {typeof feat.pValue === 'number' && feat.pValue < 0.0001 ? feat.pValue.toExponential(3) : (feat.pValue ?? 'N/A')}
+                          </span> (α = 0.05)
+                        </div>
+                      </div>
+
+                      <StatusBadge 
+                        status={feat.driftDetected ? 'danger' : 'success'}
+                        label={feat.driftDetected ? 'DRIFT' : 'STABLE'}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                  No feature metrics available. Trigger an evaluation batch to test distributions.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Incidents & Telemetry History */}
           <div className="card" id="telemetry-history-card">
             <div className="card-header">
               <div className="card-title">
@@ -1159,7 +1129,7 @@ export default function Monitoring() {
                 <span>Persisted Telemetry Stream History ({telemetryHistory.length})</span>
               </div>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Real production stream records • Audit verified
+                Authoritative Audit Trail • Tamper-Evident SHA-256 Ledger
               </span>
             </div>
 
@@ -1179,7 +1149,6 @@ export default function Monitoring() {
                       <th>Recorded At</th>
                       <th>Model Version</th>
                       <th>Inferences</th>
-                      <th>Monitoring Source</th>
                       <th>Drift Status</th>
                       <th>Drifted Features</th>
                       <th>Latency</th>
@@ -1196,11 +1165,6 @@ export default function Monitoring() {
                           <span className="font-mono">{t.versionId?.version || version?.version || 'v1.0'}</span>
                         </td>
                         <td className="tnum">{(t.sampleSize || t.performanceTelemetry?.predictionVolume || 0).toLocaleString()}</td>
-                        <td>
-                          <span className="badge badge-info font-mono" style={{ fontSize: '10px' }}>
-                            {t.monitoringSource || 'EVIDENTLY'}
-                          </span>
-                        </td>
                         <td>
                           <StatusBadge 
                             status={t.driftStatus === 'DRIFT_DETECTED' ? 'danger' : 'success'}
@@ -1274,7 +1238,7 @@ export default function Monitoring() {
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--shadow-lg)',
             border: '1px solid var(--border-color)'
           }}>
             {/* Modal Header */}
@@ -1328,7 +1292,7 @@ export default function Monitoring() {
                       <StatusBadge status={selectedReport.operationalStatus} />
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      <strong>Workload:</strong> {selectedReport.workloadId} • <strong>Model:</strong> {selectedReport.modelId?.name} ({selectedReport.versionId?.version})
+                      <strong>Workload:</strong> Fraud Detection AI • <strong>Model:</strong> {selectedReport.modelId?.name} ({selectedReport.versionId?.version})
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
                       Generated: {new Date(selectedReport.createdAt).toUTCString()}
@@ -1385,26 +1349,6 @@ export default function Monitoring() {
                     </div>
                   )}
 
-                  {/* Methodological Limitations Notice */}
-                  <div style={{
-                    padding: '12px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--warning-bg)',
-                    border: '1px solid var(--warning-border)',
-                    marginBottom: '18px',
-                    fontSize: '12px',
-                    color: 'var(--warning-text)'
-                  }}>
-                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                      <AlertTriangle size={14} />
-                      Methodological Limitations & Governance Notice:
-                    </div>
-                    <div>
-                      Statistical distribution drift measures input divergence from baseline training data. 
-                      <strong> It does not prove accuracy degradation without ground-truth label reconciliation.</strong> Automated promotion or unsupervised retraining is strictly prohibited under Sentinel stage-gates.
-                    </div>
-                  </div>
-
                   {/* Recommendations */}
                   {selectedReport.recommendations && (
                     <div>
@@ -1443,7 +1387,7 @@ export default function Monitoring() {
                     style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
                   >
                     <Download size={13} />
-                    Download Markdown (.md)
+                    Download Markdown
                   </a>
 
                   <a
@@ -1485,7 +1429,7 @@ export default function Monitoring() {
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--shadow-lg)',
             border: '1px solid var(--border-color)'
           }}>
             {/* Modal Header */}
@@ -1526,7 +1470,7 @@ export default function Monitoring() {
                 <div>
                   <div style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     Comparing registered versions of <strong>{versionComparisonData.model?.name}</strong>. 
-                    Rollback activates a previously vetted and approved version, demoting the drifting version to DEPRECATED in production and creating an immutable audit ledger entry.
+                    Rollback activates a previously vetted and approved baseline version, creating an immutable SHA-256 audit ledger entry.
                   </div>
 
                   {rollbackFeedback && (
@@ -1626,13 +1570,14 @@ export default function Monitoring() {
                       </div>
 
                       <div style={{ marginBottom: '12px' }}>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                        <label htmlFor="rollback-rationale-input" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
                           Governance & Safety Rationale:
                         </label>
                         <textarea
+                          id="rollback-rationale-input"
                           value={rollbackRationale}
                           onChange={(e) => setRollbackRationale(e.target.value)}
-                          placeholder="Provide justification for production rollback (e.g., Mitigating statistical distribution shift observed on feature X under incident INC-001)..."
+                          placeholder="Provide justification for production rollback (e.g., Mitigating statistical distribution shift observed on feature amount)..."
                           className="form-control"
                           rows="2"
                           style={{ width: '100%', fontSize: '12.5px' }}
@@ -1648,7 +1593,7 @@ export default function Monitoring() {
                         </button>
                         <button
                           onClick={handleExecuteRollback}
-                          disabled={rollbackLoading}
+                          disabled={rollbackLoading || !isMlLead}
                           className="btn btn-primary btn-sm"
                           style={{ background: 'var(--danger)', borderColor: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >

@@ -20,7 +20,7 @@ export default function AppLayout() {
     <div className="app-container">
       <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
       <div className={`main-content ${collapsed ? 'sidebar-collapsed' : ''}`}>
-        <Navbar onToggleSidebar={toggleSidebar} isSidebarCollapsed={collapsed} />
+        <Navbar />
         {isPendingVerification && (
           <div style={{
             backgroundColor: 'var(--color-warning-bg)',

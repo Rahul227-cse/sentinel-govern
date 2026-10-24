@@ -1,4 +1,6 @@
-const API_BASE = '/api';
+const rawApiBase = (import.meta.env.VITE_API_URL || '/api').trim();
+const normalizedBase = rawApiBase.endsWith('/') ? rawApiBase.slice(0, -1) : rawApiBase;
+const API_BASE = normalizedBase || '/api';
 
 async function request(url, options = {}) {
   const token = localStorage.getItem('sentinel_token') || localStorage.getItem('aegis_token');
@@ -8,7 +10,8 @@ async function request(url, options = {}) {
     ...(options.headers || {})
   };
 
-  const response = await fetch(`${API_BASE}${url}`, {
+  const endpoint = url.startsWith('/') ? url : `/${url}`;
+  const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
     credentials: 'include' // Required for HttpOnly refresh token cookies
@@ -250,3 +253,18 @@ export const simulateTamper = (data) =>
 export const repairAuditLedger = () => request('/audit/repair', { method: 'POST' });
 export const getComplianceDossier = (modelId, versionId = '') =>
   request(`/audit/dossier/${modelId}${versionId ? `/${versionId}` : ''}`);
+
+// ─── Model API Configuration ──────────────────────────────────────────────────
+
+export const updateModelEndpoint = (modelId, data) =>
+  request(`/models/${modelId}/endpoint`, { method: 'PATCH', body: JSON.stringify(data) });
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export const getNotifications = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return request(`/notifications${query ? `?${query}` : ''}`);
+};
+export const markNotificationRead = (id) =>
+  request(`/notifications/${id}/read`, { method: 'PATCH' });
+

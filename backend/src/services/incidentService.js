@@ -1,6 +1,7 @@
 import { Incident } from '../models/Incident.js';
 import { Model } from '../models/Model.js';
 import { ModelVersion } from '../models/ModelVersion.js';
+import { Notification } from '../models/Notification.js';
 import { recordAuditEvent } from './auditEngine.js';
 
 export async function createDriftIncident({
@@ -171,6 +172,26 @@ export async function createDriftIncident({
       recommendedRollbackVersion: previousApprovedVersion?.version || 'None'
     }
   });
+
+  // Automatically dispatch persisted notification to ML Lead
+  try {
+    const affectedFeaturesStr = isEvidently && driftedColumns.length > 0
+      ? driftedColumns.join(', ')
+      : 'runtime feature distributions';
+
+    await Notification.create({
+      recipientRole: 'ML_LEAD',
+      title: `[Action Required] Drift Incident ${incident.incidentNumber} Detected`,
+      message: `Model "${model.name}" (${version.version}) detected statistically significant distribution drift in ${affectedFeaturesStr}. Recommended action: ${incident.recommendedAction}.`,
+      type: 'DRIFT_INCIDENT',
+      severity: incident.severity === 'HIGH' ? 'CRITICAL' : 'WARNING',
+      modelId: model._id,
+      versionId: version._id,
+      incidentId: incident._id
+    });
+  } catch (notifErr) {
+    console.warn('[Notification] Failed to persist notification:', notifErr.message);
+  }
 
   return incident;
 }

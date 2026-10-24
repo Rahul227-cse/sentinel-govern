@@ -28,7 +28,7 @@ const MAX_BACKOFF_MS = 900000; // 15 minutes max backoff
 
 class MonitoringScheduler {
   constructor() {
-    this.status = 'ACTIVE'; // 'ACTIVE' | 'PAUSED'
+    this.status = 'PAUSED'; // Default PAUSED until user explicitly connects and starts monitoring
     this.mode = 'REAL'; // 'REAL' (passive inference ingestion) | 'DEMO' (manual walkthrough)
     this.batchSize = DEFAULT_BATCH_SIZE;
     this.fraudIntervalMs = DEFAULT_FRAUD_INTERVAL_MS;
@@ -178,15 +178,13 @@ class MonitoringScheduler {
   }
 
   /**
-   * Schedules immediate and subsequent recurring runs for all active workloads.
+   * Schedules immediate and subsequent recurring runs for active walkthrough workloads.
    */
   _scheduleAll() {
     this._clearAllTimers();
 
-    // Stagger startup runs so they do not all hit simultaneously
-    this._scheduleWorkload(WORKLOAD_IDS.FRAUD, 5000); // Fraud after 5s
-    this._scheduleWorkload(WORKLOAD_IDS.CREDIT_RISK, 15000); // Credit Risk after 15s
-    this._scheduleWorkload(WORKLOAD_IDS.INSURANCE, 25000); // Insurance after 25s
+    // Schedule only the active Fraud AI workload for the interview walkthrough
+    this._scheduleWorkload(WORKLOAD_IDS.FRAUD, 5000);
   }
 
   /**

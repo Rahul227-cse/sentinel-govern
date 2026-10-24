@@ -118,3 +118,29 @@ export async function rollbackModel(req, res) {
     res.status(400).json({ success: false, error: error.message });
   }
 }
+
+export async function getNotifications(req, res) {
+  try {
+    const role = req.user ? req.user.role : req.query.role;
+    const filter = {};
+    if (role) {
+      filter.$or = [{ recipientRole: role }, { recipientRole: 'ALL' }];
+    }
+    const { Notification } = await import('../models/Notification.js');
+    const notifs = await Notification.find(filter).sort({ createdAt: -1 }).limit(30);
+    res.json({ success: true, count: notifs.length, data: notifs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+export async function markNotificationRead(req, res) {
+  try {
+    const { id } = req.params;
+    const { Notification } = await import('../models/Notification.js');
+    const notif = await Notification.findByIdAndUpdate(id, { read: true }, { new: true });
+    res.json({ success: true, data: notif });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}

@@ -63,6 +63,15 @@ const modelSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  apiConfig: {
+    endpointUrl: { type: String, default: 'http://127.0.0.1:8000' },
+    healthEndpoint: { type: String, default: '/health' },
+    predictEndpoint: { type: String, default: '/score' },
+    authHeader: { type: String, default: '' },
+    status: { type: String, enum: ['DISCONNECTED', 'CONNECTED', 'UNAVAILABLE', 'CONFIGURATION_REQUIRED'], default: 'DISCONNECTED' },
+    lastCheckedAt: { type: Date, default: null },
+    lastResponseTimeMs: { type: Number, default: null }
+  },
   riskAssessment: { type: riskAssessmentSchema, default: () => ({}) }
 }, {
   timestamps: true

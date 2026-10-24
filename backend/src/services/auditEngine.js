@@ -11,10 +11,93 @@ export function computeBlockHash(previousHash, timestamp, actor, action, payload
 
 let auditWriteQueue = Promise.resolve();
 
-async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, entityType, entityId, payload = {} }, maxRetries = 5) {
+// Active transactional sessions with uncommitted audit writes.
+// Map<ClientSession, { promise: Promise<void>, resolve: Function }>
+const activeTxSessions = new Map();
+const kHooksInstalled = Symbol('auditEngineHooksInstalled');
+
+function trackTxSession(session) {
+  if (!session) return;
+
+  if (!activeTxSessions.has(session)) {
+    let resolveSession;
+    const sessionPromise = new Promise((resolve) => {
+      resolveSession = resolve;
+    });
+    activeTxSessions.set(session, { promise: sessionPromise, resolve: resolveSession });
+  }
+
+  if (session[kHooksInstalled]) {
+    return;
+  }
+  session[kHooksInstalled] = true;
+
+  const cleanup = () => {
+    const entry = activeTxSessions.get(session);
+    if (entry) {
+      activeTxSessions.delete(session);
+      entry.resolve();
+    }
+  };
+
+  const origCommit = typeof session.commitTransaction === 'function' ? session.commitTransaction.bind(session) : null;
+  const origAbort = typeof session.abortTransaction === 'function' ? session.abortTransaction.bind(session) : null;
+  const origEnd = typeof session.endSession === 'function' ? session.endSession.bind(session) : null;
+
+  if (origCommit) {
+    session.commitTransaction = async function (...args) {
+      try {
+        return await origCommit(...args);
+      } finally {
+        cleanup();
+      }
+    };
+  }
+
+  if (origAbort) {
+    session.abortTransaction = async function (...args) {
+      try {
+        return await origAbort(...args);
+      } finally {
+        cleanup();
+      }
+    };
+  }
+
+  if (origEnd) {
+    session.endSession = async function (...args) {
+      try {
+        return await origEnd(...args);
+      } finally {
+        cleanup();
+      }
+    };
+  }
+}
+
+async function waitForOtherActiveTransactions(currentSession = null) {
+  while (true) {
+    const otherPromises = [];
+    for (const [sess, entry] of activeTxSessions.entries()) {
+      if (sess !== currentSession) {
+        otherPromises.push(entry.promise);
+      }
+    }
+    if (otherPromises.length === 0) {
+      break;
+    }
+    await Promise.allSettled(otherPromises);
+  }
+}
+
+async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, entityType, entityId, payload = {}, session = null }, maxRetries = 5) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const lastRecord = await AuditLedger.findOne().sort({ sequenceNumber: -1 });
+      const query = AuditLedger.findOne().sort({ sequenceNumber: -1 });
+      if (session) {
+        query.session(session);
+      }
+      const lastRecord = await query;
 
       const sequenceNumber = lastRecord ? lastRecord.sequenceNumber + 1 : 0;
       const previousHash = lastRecord ? lastRecord.currentHash : GENESIS_PREVIOUS_HASH;
@@ -22,7 +105,7 @@ async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, enti
 
       const currentHash = computeBlockHash(previousHash, timestamp, actor, action, payload);
 
-      const auditEntry = await AuditLedger.create({
+      const docData = {
         sequenceNumber,
         previousHash,
         currentHash,
@@ -33,7 +116,15 @@ async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, enti
         entityType,
         entityId: String(entityId),
         payload
-      });
+      };
+
+      let auditEntry;
+      if (session) {
+        const createdDocs = await AuditLedger.create([docData], { session });
+        auditEntry = createdDocs[0];
+      } else {
+        auditEntry = await AuditLedger.create(docData);
+      }
 
       return auditEntry;
     } catch (error) {
@@ -41,7 +132,10 @@ async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, enti
         (error.name === 'MongoServerError' && error.code === 11000) ||
         (error.message && (error.message.includes('E11000') || error.message.includes('duplicate key')));
 
-      if (isDuplicateKey && attempt < maxRetries - 1) {
+      // In a multi-document transaction, an E11000 or write error aborts the transaction.
+      // Statement-level retries on the same session will fail with "transaction aborted",
+      // so only retry if we are NOT inside a transactional session.
+      if (!session && isDuplicateKey && attempt < maxRetries - 1) {
         const delayMs = 15 * Math.pow(2, attempt) + Math.floor(Math.random() * 20);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         continue;
@@ -53,16 +147,30 @@ async function _recordAuditEventWithRetry({ actor, role = 'SYSTEM', action, enti
   }
 }
 
-export async function recordAuditEvent({ actor, role = 'SYSTEM', action, entityType, entityId, payload = {} }) {
-  const executeOperation = () => _recordAuditEventWithRetry({ actor, role, action, entityType, entityId, payload });
+export async function recordAuditEvent({ actor, role = 'SYSTEM', action, entityType, entityId, payload = {}, session = null }) {
+  if (session) {
+    trackTxSession(session);
+  }
+
+  // Ordinary writes (or writes from another transaction) wait for any in-flight
+  // uncommitted transactional session to resolve BEFORE entering the database write queue.
+  // This prevents non-transactional writes from reading uncommitted sequence numbers,
+  // blocking on index locks, and starving transaction-scoped audit writes.
+  await waitForOtherActiveTransactions(session);
+
+  const executeOperation = () => _recordAuditEventWithRetry({ actor, role, action, entityType, entityId, payload, session });
 
   const queuedPromise = auditWriteQueue.then(executeOperation, executeOperation);
   auditWriteQueue = queuedPromise.catch(() => {});
   return queuedPromise;
 }
 
-export async function verifyAuditChainIntegrity() {
-  const records = await AuditLedger.find().sort({ sequenceNumber: 1 });
+export async function verifyAuditChainIntegrity({ session = null } = {}) {
+  const query = AuditLedger.find().sort({ sequenceNumber: 1 });
+  if (session) {
+    query.session(session);
+  }
+  const records = await query;
 
   if (!records || records.length === 0) {
     return {

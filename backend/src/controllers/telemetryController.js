@@ -170,19 +170,18 @@ export async function getMonitoringOverview(req, res) {
     const workloadId = req.query.workloadId;
     let model = null;
 
-    // Workload mapping lookup if workloadId specified
-    if (workloadId) {
-      const modelsMap = await ensureGovernedWorkloadModels();
-      const binding = modelsMap[workloadId];
-      if (binding) {
-        model = await Model.findById(binding.modelId).populate('currentProductionVersionId');
-      }
-    }
-
-    if (!model && modelId) {
+    // Prioritize explicit modelId first
+    if (modelId) {
       model = await Model.findById(modelId).populate('currentProductionVersionId');
       if (!model) {
         return res.status(404).json({ success: false, error: 'Model not found' });
+      }
+    } else if (workloadId) {
+      // Fallback: Workload mapping lookup only when modelId is absent
+      const modelsMap = await ensureGovernedWorkloadModels();
+      const binding = modelsMap[workloadId];
+      if (binding && binding.modelId) {
+        model = await Model.findById(binding.modelId).populate('currentProductionVersionId');
       }
     }
 
@@ -223,7 +222,7 @@ export async function getMonitoringOverview(req, res) {
     }
 
     // Determine effective workloadId for this model
-    let resolvedWorkloadId = workloadId;
+    let resolvedWorkloadId = (!modelId && workloadId) ? workloadId : null;
     if (!resolvedWorkloadId) {
       if (/Credit/i.test(model.name)) resolvedWorkloadId = WORKLOAD_IDS.CREDIT_RISK;
       else if (/Insurance/i.test(model.name)) resolvedWorkloadId = WORKLOAD_IDS.INSURANCE;
@@ -231,9 +230,9 @@ export async function getMonitoringOverview(req, res) {
       else resolvedWorkloadId = WORKLOAD_IDS.FRAUD;
     }
 
-    // If workloadId was explicitly provided in query, scope by workloadId (or modelId).
+    // If workloadId was explicitly provided in query without modelId, scope by workloadId (or modelId).
     // Otherwise, scope strictly to the target modelId so unmonitored models return clean NO_DATA.
-    const queryFilter = workloadId 
+    const queryFilter = (!modelId && workloadId) 
       ? { $or: [{ workloadId }, { modelId: model._id }] }
       : { modelId: model._id };
 

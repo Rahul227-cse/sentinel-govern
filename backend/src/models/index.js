@@ -13,3 +13,4 @@ export { AuditLedger, AuditLog } from './AuditLedger.js';
 export { Report } from './Report.js';
 export { ComplianceDossier } from './ComplianceDossier.js';
 export { Telemetry } from './Telemetry.js';
+export { Notification } from './Notification.js';
