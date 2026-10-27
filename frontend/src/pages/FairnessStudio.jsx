@@ -7,7 +7,7 @@ import PageHeader from '../components/PageHeader';
 import MetricCard from '../components/MetricCard';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
-import { formatRiskLevel, formatLifecycleLabel, formatStatusLabel } from '../utils/formatters';
+import { formatRiskLevel, formatLifecycleLabel, formatStatusLabel, formatEvaluationStatus, formatPolicyStatus } from '../utils/formatters';
 import { 
   Scale, 
   CheckCircle2, 
@@ -189,14 +189,18 @@ export default function FairnessStudio() {
       setLatestEval(res.evaluation);
       setPolicyDecision(res.policyDecision);
       setEvaluations([res.evaluation, ...evaluations]);
+      const policyMsg = res.policyDecision?.passed
+        ? 'PASSED'
+        : (res.policyDecision?.noPolicyAssigned ? 'BLOCKED (No Policy Assigned)' : 'POLICY VIOLATION');
       setUploadSuccess(
-        `Evaluation imported successfully: ${res.datasetMeta?.rowCount ?? res.evaluation?.sampleCount} samples analyzed from "${res.datasetMeta?.filename || selectedFile.name}". Policy status: ${res.policyDecision?.passed ? 'PASSED' : 'VIOLATION'}.`
+        `Evaluation imported successfully: ${res.datasetMeta?.rowCount ?? res.evaluation?.sampleCount} samples analyzed from "${res.datasetMeta?.filename || selectedFile.name}". Evaluation outcome: ${res.version?.evaluationStatus === 'EVALUATED_PASS' ? 'PASSED' : 'FAILED'}. Policy gate: ${policyMsg}.`
       );
 
       setVersions(prev => prev.map(v => v._id === selectedVersionId ? {
         ...v,
+        evaluationStatus: res.version?.evaluationStatus || v.evaluationStatus,
         policyStatus: res.policyDecision?.passed ? 'PASSED' : 'FAILED',
-        lifecycleStatus: 'EVALUATION',
+        lifecycleStatus: res.version?.lifecycleStatus || 'EVALUATION',
         latestPolicyEvaluation: res.policyDecision
       } : v));
 
@@ -214,6 +218,10 @@ export default function FairnessStudio() {
     return (
       <div className="page-container">
         <PageHeader
+          breadcrumbs={[
+            { label: 'Workspace', to: '/app' },
+            { label: 'Fairness & Eval Studio' }
+          ]}
           title="Fairness & Bias Evaluation Studio"
           subtitle="Statistical validation of demographic parity, disparate impact (80% benchmark), and predictive performance for existing AI model versions."
         />
@@ -235,6 +243,10 @@ export default function FairnessStudio() {
     <div className="page-container">
       {/* Page Header */}
       <PageHeader
+        breadcrumbs={[
+          { label: 'Workspace', to: '/app' },
+          { label: 'Fairness & Eval Studio' }
+        ]}
         title="Fairness & Bias Evaluation Studio"
         subtitle="Statistical validation of demographic parity, disparate impact (80% benchmark), and predictive performance for existing AI model versions."
       />
@@ -276,7 +288,7 @@ export default function FairnessStudio() {
             >
               {versions.map(v => (
                 <option key={v._id} value={v._id}>
-                  {v.version} — {formatLifecycleLabel(v.lifecycleStatus)} ({formatStatusLabel(v.policyStatus)})
+                  {v.version} — {formatLifecycleLabel(v.lifecycleStatus)} ({v.evaluationStatus && v.evaluationStatus !== 'NOT_EVALUATED' ? `${formatEvaluationStatus(v.evaluationStatus)} • ` : ''}{formatPolicyStatus(v.policyStatus)})
                 </option>
               ))}
             </select>
@@ -440,7 +452,11 @@ export default function FairnessStudio() {
             )}
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700 }}>
-                {policyDecision.passed ? 'GOVERNANCE POLICY PASSED' : 'GOVERNANCE POLICY VIOLATION — DEPLOYMENT BLOCKED'}
+                {policyDecision.passed
+                  ? 'GOVERNANCE POLICY PASSED'
+                  : (policyDecision.noPolicyAssigned || policyDecision.reasons?.some(r => r.toLowerCase().includes('no governance policy')))
+                  ? 'NO GOVERNANCE POLICY ASSIGNED — DEPLOYMENT BLOCKED'
+                  : 'GOVERNANCE POLICY VIOLATION — DEPLOYMENT BLOCKED'}
               </div>
               <div style={{ fontSize: '12.5px', marginTop: '3px' }}>
                 {policyDecision.passed ? (
@@ -471,11 +487,16 @@ export default function FairnessStudio() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileSpreadsheet size={18} color="var(--accent-primary)" />
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>Evaluation Record: {latestEval.datasetName}</span>
                 <span className="badge badge-neutral font-mono" style={{ textTransform: 'uppercase', fontSize: '10.5px' }}>
                   {latestEval.dataSource || 'FILE_UPLOAD'}
                 </span>
+                {currentVersionObj?.evaluationStatus && (
+                  <span className={`badge ${currentVersionObj.evaluationStatus === 'EVALUATED_PASS' ? 'badge-success' : currentVersionObj.evaluationStatus === 'EVALUATED_FAIL' ? 'badge-danger' : 'badge-neutral'}`} style={{ fontSize: '10.5px' }}>
+                    Evaluation Outcome: {currentVersionObj.evaluationStatus === 'EVALUATED_PASS' ? 'PASSED' : currentVersionObj.evaluationStatus === 'EVALUATED_FAIL' ? 'FAILED' : 'NOT EVALUATED'}
+                  </span>
+                )}
                 {latestEval.fairnessMetrics?.fairnessEvaluated === false && (
                   <span className="badge badge-warning" style={{ fontSize: '10.5px' }}>
                     Fairness Skipped (No Protected Group)

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Telemetry } from '../models/Telemetry.js';
 import { Model } from '../models/Model.js';
 import { ModelVersion } from '../models/ModelVersion.js';
@@ -21,7 +22,8 @@ import {
   checkWorkloadHealth,
   generateWorkloadSyntheticInputs,
   scoreWorkloadBatch,
-  ensureGovernedWorkloadModels
+  ensureGovernedWorkloadModels,
+  resolveWorkloadForModel
 } from '../services/workloadService.js';
 import { monitoringScheduler } from '../services/monitoringScheduler.js';
 
@@ -167,6 +169,7 @@ export async function ingestRuntimeTelemetry(req, res) {
 export async function getMonitoringOverview(req, res) {
   try {
     const modelId = req.params.modelId || req.query.modelId;
+    const versionId = req.query.versionId;
     const workloadId = req.query.workloadId;
     let model = null;
 
@@ -209,8 +212,16 @@ export async function getMonitoringOverview(req, res) {
       });
     }
 
-    // Identify effective version
-    let effectiveVersion = model.currentProductionVersionId;
+    // Identify effective version: respect requested versionId if explicitly provided
+    let effectiveVersion = null;
+    if (versionId && mongoose.Types.ObjectId.isValid(versionId)) {
+      effectiveVersion = await ModelVersion.findOne({ _id: versionId, modelId: model._id });
+    }
+    if (!effectiveVersion && model.currentProductionVersionId) {
+      effectiveVersion = (typeof model.currentProductionVersionId === 'object' && model.currentProductionVersionId?._id)
+        ? model.currentProductionVersionId
+        : await ModelVersion.findById(model.currentProductionVersionId);
+    }
     if (!effectiveVersion) {
       effectiveVersion = await ModelVersion.findOne({
         modelId: model._id,
@@ -224,17 +235,21 @@ export async function getMonitoringOverview(req, res) {
     // Determine effective workloadId for this model
     let resolvedWorkloadId = (!modelId && workloadId) ? workloadId : null;
     if (!resolvedWorkloadId) {
-      if (/Credit/i.test(model.name)) resolvedWorkloadId = WORKLOAD_IDS.CREDIT_RISK;
-      else if (/Insurance/i.test(model.name)) resolvedWorkloadId = WORKLOAD_IDS.INSURANCE;
-      else if (/Churn/i.test(model.name)) resolvedWorkloadId = WORKLOAD_IDS.CHURN;
-      else resolvedWorkloadId = WORKLOAD_IDS.FRAUD;
+      resolvedWorkloadId = resolveWorkloadForModel(model);
     }
 
+    // Formulate queryFilter:
+    // If versionId is explicitly provided in query, scope strictly to modelId AND versionId.
     // If workloadId was explicitly provided in query without modelId, scope by workloadId (or modelId).
-    // Otherwise, scope strictly to the target modelId so unmonitored models return clean NO_DATA.
-    const queryFilter = (!modelId && workloadId) 
-      ? { $or: [{ workloadId }, { modelId: model._id }] }
-      : { modelId: model._id };
+    // Otherwise, scope strictly to modelId so queries without versionId preserve contract while version queries isolate.
+    let queryFilter;
+    if (versionId && effectiveVersion) {
+      queryFilter = { modelId: model._id, versionId: effectiveVersion._id };
+    } else if (!modelId && workloadId) {
+      queryFilter = { $or: [{ workloadId }, { modelId: model._id }] };
+    } else {
+      queryFilter = { modelId: model._id };
+    }
 
     const telemetry = await Telemetry.find(queryFilter)
       .populate('versionId', 'version lifecycleStatus deploymentStatus')
@@ -269,7 +284,7 @@ export async function getMonitoringOverview(req, res) {
     } else if (latestTelemetry) {
       if (latestTelemetry.driftStatus === 'DRIFT_DETECTED') {
         signalStatus = 'DRIFT_DETECTED';
-      } else if (latestTelemetry.driftStatus === 'WARNING') {
+      } else if (latestTelemetry.driftStatus === 'WARNING' || latestTelemetry.driftStatus === 'INSUFFICIENT_DATA') {
         signalStatus = 'WARNING';
       } else {
         signalStatus = 'HEALTHY';
@@ -281,6 +296,10 @@ export async function getMonitoringOverview(req, res) {
       .slice(0, 15)
       .reverse()
       .map(t => ({
+        _id: t._id,
+        telemetryId: t._id,
+        modelId: t.modelId,
+        versionId: t.versionId,
         batchId: t.batchId,
         recordedAt: t.recordedAt,
         aggregatePsi: t.aggregatePsi !== undefined && t.aggregatePsi !== null ? t.aggregatePsi : null,
@@ -451,20 +470,94 @@ export async function setSchedulerMode(req, res) {
 }
 
 /**
- * Manually triggers an ad-hoc monitoring batch for any of the 4 workloads.
+ * Manually triggers an ad-hoc monitoring batch for any of the workloads or a specific governed model.
  */
 export async function triggerSchedulerBatch(req, res) {
   try {
-    const { workloadId = WORKLOAD_IDS.FRAUD, scenario = 'BASELINE', count = 25 } = req.body;
+    const { modelId, versionId, workloadId, scenario = 'BASELINE', count = 25 } = req.body;
     const actor = req.user ? (req.user.name || req.user.email) : 'ML Lead';
-    const result = await monitoringScheduler.triggerBatch(workloadId, { scenario, count: Number(count), actor });
+
+    let targetModel = null;
+    let targetVersion = null;
+    let targetWorkloadId = workloadId;
+
+    if (modelId) {
+      targetModel = await Model.findById(modelId);
+      if (!targetModel) {
+        return res.status(404).json({
+          success: false,
+          error: `Governed model not found for ID: ${modelId}`
+        });
+      }
+
+      if (versionId) {
+        targetVersion = await ModelVersion.findById(versionId);
+        if (!targetVersion) {
+          return res.status(404).json({
+            success: false,
+            error: `Model version not found for ID: ${versionId}`
+          });
+        }
+        if (String(targetVersion.modelId) !== String(targetModel._id)) {
+          return res.status(400).json({
+            success: false,
+            error: `Model version ${targetVersion.version} (${versionId}) does not belong to model "${targetModel.name}" (${modelId}).`
+          });
+        }
+      } else {
+        if (targetModel.currentProductionVersionId) {
+          targetVersion = await ModelVersion.findById(targetModel.currentProductionVersionId);
+        }
+        if (!targetVersion) {
+          targetVersion = await ModelVersion.findOne({
+            modelId: targetModel._id,
+            lifecycleStatus: 'IN_PRODUCTION'
+          });
+        }
+        if (!targetVersion) {
+          targetVersion = await ModelVersion.findOne({
+            modelId: targetModel._id,
+            lifecycleStatus: 'APPROVED'
+          });
+        }
+      }
+
+      if (!targetVersion) {
+        return res.status(400).json({
+          success: false,
+          error: `No approved or production version found for model "${targetModel.name}". Please approve and deploy a version before running evaluation.`
+        });
+      }
+
+      const isEligible = ['IN_PRODUCTION', 'APPROVED'].includes(targetVersion.lifecycleStatus) || targetVersion.deploymentStatus === 'IN_PRODUCTION';
+      if (!isEligible) {
+        return res.status(403).json({
+          success: false,
+          error: `Model version ${targetVersion.version} is in status "${targetVersion.lifecycleStatus}". Runtime monitoring and evaluation is only permitted for APPROVED or IN_PRODUCTION versions.`
+        });
+      }
+
+      if (!targetWorkloadId) {
+        targetWorkloadId = resolveWorkloadForModel(targetModel);
+      }
+    }
+
+    const result = await monitoringScheduler.triggerBatch(targetWorkloadId, {
+      modelId: targetModel?._id,
+      versionId: targetVersion?._id,
+      scenario,
+      count: Number(count),
+      actor
+    });
+
     res.status(201).json({
       success: true,
-      message: `Successfully executed batch for workload '${workloadId}' in scenario '${scenario}'.`,
+      message: `Successfully executed batch for ${targetModel ? `model "${targetModel.name}" (workload '${targetWorkloadId}')` : `workload '${targetWorkloadId}'`} in scenario '${scenario}'.`,
       data: result
     });
   } catch (error) {
-    res.status(500).json({
+    const statusCode = error.statusCode || (error.message?.includes('Unknown workload') ? 400 : 500);
+    res.status(statusCode).json({
       success: false,
       error: error.message
     });
@@ -478,7 +571,7 @@ export async function triggerSchedulerBatch(req, res) {
 export async function evaluateExternalAiTelemetry(req, res) {
   try {
     const {
-      workloadId = WORKLOAD_IDS.FRAUD,
+      workloadId,
       modelId,
       versionId,
       scenario = 'BASELINE', // 'BASELINE' | 'DRIFTED' | 'MIXED'
@@ -489,32 +582,25 @@ export async function evaluateExternalAiTelemetry(req, res) {
 
     const actor = req.user ? (req.user.name || req.user.email) : 'External AI Evaluation';
 
-    // 1. Health check for requested workload
-    const health = await checkWorkloadHealth(workloadId);
-    if (health.status !== 'CONNECTED') {
-      const code = health.status === 'CONFIGURATION_REQUIRED' ? 'CONFIGURATION_REQUIRED' : 'EXTERNAL_AI_UNAVAILABLE';
-      return res.status(health.status === 'CONFIGURATION_REQUIRED' ? 400 : 503).json({
-        success: false,
-        error: `Workload '${workloadId}' is not connected: ${health.message || health.error || 'Health check failed'}`,
-        code,
-        data: health
-      });
-    }
-
-    // 2. Identify target governed Model & Version
-    const modelsMap = await ensureGovernedWorkloadModels();
+    // 1. Resolve target Model & Version first
     let effectiveModelId = modelId;
     let effectiveVersionId = versionId;
+    let model = effectiveModelId ? await Model.findById(effectiveModelId) : null;
 
-    if (!effectiveModelId && modelsMap[workloadId]) {
-      effectiveModelId = modelsMap[workloadId].modelId;
-      effectiveVersionId = modelsMap[workloadId].versionId;
+    if (!model && workloadId) {
+      const modelsMap = await ensureGovernedWorkloadModels();
+      if (modelsMap[workloadId]) {
+        effectiveModelId = modelsMap[workloadId].modelId;
+        effectiveVersionId = effectiveVersionId || modelsMap[workloadId].versionId;
+        model = modelsMap[workloadId].model;
+      }
     }
 
-    let model = effectiveModelId ? await Model.findById(effectiveModelId) : null;
     if (!model) {
       model = await Model.findOne({ lifecycleStatus: 'IN_PRODUCTION' }) || await Model.findOne().sort({ createdAt: -1 });
+      if (model) effectiveModelId = model._id;
     }
+
     if (!model) {
       return res.status(404).json({ success: false, error: 'No governed model found for telemetry evaluation.' });
     }
@@ -522,14 +608,32 @@ export async function evaluateExternalAiTelemetry(req, res) {
     if (!effectiveVersionId) {
       effectiveVersionId = model.currentProductionVersionId;
       if (!effectiveVersionId) {
-        const v = await ModelVersion.findOne({ modelId: model._id }).sort({ createdAt: -1 });
+        const v = await ModelVersion.findOne({ modelId: model._id, lifecycleStatus: 'IN_PRODUCTION' })
+          || await ModelVersion.findOne({ modelId: model._id, lifecycleStatus: 'APPROVED' })
+          || await ModelVersion.findOne({ modelId: model._id }).sort({ createdAt: -1 });
         if (v) effectiveVersionId = v._id;
       }
     }
 
     const version = effectiveVersionId ? await ModelVersion.findById(effectiveVersionId) : null;
     if (!version) {
-      return res.status(404).json({ success: false, error: 'Model version not found.' });
+      return res.status(404).json({ success: false, error: `Model version not found for model "${model.name}".` });
+    }
+
+    const effectiveWorkloadId = workloadId || resolveWorkloadForModel(model);
+
+    // 2. Health check for requested model / workload
+    const hasConfiguredEndpoint = Boolean(model.apiConfig?.endpointUrl?.trim());
+    const probeTarget = hasConfiguredEndpoint ? model._id : effectiveWorkloadId;
+    const health = await checkWorkloadHealth(probeTarget);
+    if (health.status !== 'CONNECTED') {
+      const code = health.status === 'CONFIGURATION_REQUIRED' ? 'CONFIGURATION_REQUIRED' : 'EXTERNAL_AI_UNAVAILABLE';
+      return res.status(health.status === 'CONFIGURATION_REQUIRED' ? 400 : 503).json({
+        success: false,
+        error: `Workload '${effectiveWorkloadId}' (model "${model.name}") is not connected: ${health.message || health.error || 'Health check failed'}`,
+        code,
+        data: health
+      });
     }
 
     // 3. Obtain controlled test inputs (synthetic walkthrough traffic)
@@ -537,16 +641,20 @@ export async function evaluateExternalAiTelemetry(req, res) {
       ? transactions
       : (Array.isArray(inputs) && inputs.length > 0)
         ? inputs
-        : generateWorkloadSyntheticInputs(workloadId, { scenario, count });
+        : generateWorkloadSyntheticInputs(effectiveWorkloadId, { scenario, count });
 
     // 4. Score inputs against real prediction service
-    const scoredRecords = await scoreWorkloadBatch(workloadId, testInputs);
+    const scoredRecords = await scoreWorkloadBatch(
+      effectiveWorkloadId,
+      testInputs,
+      hasConfiguredEndpoint ? { modelId: model._id, versionId: version._id, allowDraft: false } : {}
+    );
 
     // 5. Ingest scored records through Evidently and Sentinel persistence
     const result = await ingestRuntimeTelemetryBatch({
       modelId: model._id,
       versionId: version._id,
-      workloadId,
+      workloadId: effectiveWorkloadId,
       runtimeRecords: scoredRecords,
       isSynthetic: true,
       actor
@@ -554,11 +662,11 @@ export async function evaluateExternalAiTelemetry(req, res) {
 
     res.status(201).json({
       success: true,
-      message: `Successfully scored ${scoredRecords.length} controlled inputs via '${workloadId}' and analyzed drift via Evidently.`,
+      message: `Successfully scored ${scoredRecords.length} controlled inputs via '${effectiveWorkloadId}' and analyzed drift via Evidently.`,
       data: {
         ...result,
         scenario,
-        workloadId,
+        workloadId: effectiveWorkloadId,
         isSyntheticWalkthroughTraffic: true,
         scoredCount: scoredRecords.length,
         sampleScoredRecord: scoredRecords[0]

@@ -53,6 +53,8 @@ function getDiagnosticErrorInfo(err) {
 export async function connectDB() {
   const uri = process.env.MONGODB_URI;
   const isProduction = process.env.NODE_ENV === 'production';
+  const isTest = process.env.NODE_ENV === 'test';
+  const allowMemoryDb = process.env.ALLOW_MEMORY_DB === 'true';
 
   if (isProduction) {
     if (!uri) {
@@ -61,8 +63,8 @@ export async function connectDB() {
     const maskedUri = uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
     console.log(`[DB] Connecting to production MongoDB at ${maskedUri}...`);
     try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-      console.log('[DB] Connected successfully to production MongoDB');
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 10000 });
+      console.log(`[DB] Connected successfully to production MongoDB at ${maskedUri} [database: ${mongoose.connection.name}]`);
       return;
     } catch (err) {
       const diag = getDiagnosticErrorInfo(err);
@@ -72,27 +74,51 @@ export async function connectDB() {
     }
   }
 
-  if (uri) {
+  // Non-production (development / test)
+  if (uri && !isTest && !allowMemoryDb) {
     const maskedUri = uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
     try {
       console.log(`[DB] Attempting connection to MongoDB at ${maskedUri}...`);
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-      console.log('[DB] Connected successfully to external MongoDB');
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 10000 });
+      console.log(`[DB] Connected successfully to external MongoDB at ${maskedUri} [database: ${mongoose.connection.name}]`);
       return;
     } catch (err) {
       const diag = getDiagnosticErrorInfo(err);
-      console.warn(`\n⚠️  [DB WARNING] External MongoDB connection failed (${err.message}).`);
-      console.warn(`⚠️  [DB DIAGNOSTIC] Underlying connection failure breakdown:`);
+      console.error(`\n❌ [DB FATAL] External MongoDB connection failed (${err.message}).`);
+      console.error(`❌ [DB DIAGNOSTIC] Underlying connection failure breakdown:`);
       for (const line of diag) {
-        console.warn(`    ${line}`);
+        console.error(`    ${line}`);
       }
-      console.warn(`⚠️  [DB WARNING] Falling back to ephemeral MongoMemoryServer in non-production mode.`);
-      console.warn(`⚠️  [DB WARNING] Data stored in-memory will reset when the server restarts.\n`);
+      console.error(`❌ [DB FATAL] Silent in-memory database fallback is DISABLED in development.`);
+      console.error(`❌ [DB FATAL] Server startup aborted. To explicitly allow an ephemeral database for isolated testing, set ALLOW_MEMORY_DB=true.\n`);
+      throw new Error(`[DB FATAL] External MongoDB connection failed: ${err.message}. Silent in-memory fallback disabled.`);
     }
   }
 
+  // If URI is configured in test mode or with explicit ALLOW_MEMORY_DB=true
+  if (uri && (isTest || allowMemoryDb)) {
+    const maskedUri = uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+    try {
+      console.log(`[DB] Attempting connection to MongoDB at ${maskedUri}...`);
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000 });
+      console.log(`[DB] Connected successfully to external MongoDB at ${maskedUri} [database: ${mongoose.connection.name}]`);
+      return;
+    } catch (err) {
+      console.warn(`[DB WARNING] External MongoDB connection failed in test/memory-allowed mode (${err.message}). Falling back to MongoMemoryServer.`);
+    }
+  }
+
+  // If no URI is provided outside test mode and memory mode is not explicitly allowed
+  if (!uri && !isTest && !allowMemoryDb) {
+    const err = new Error('[DB FATAL] MONGODB_URI environment variable is required. To explicitly use an ephemeral in-memory database for local testing, set ALLOW_MEMORY_DB=true.');
+    console.error(err.message);
+    throw err;
+  }
+
+  // Ephemeral Memory database mode (strictly when isTest || allowMemoryDb)
   try {
-    console.log('[DB] Initializing MongoMemoryServer for local environment...');
+    console.log(`[DB] Initializing MongoMemoryServer (${isTest ? 'test mode' : 'ALLOW_MEMORY_DB=true'})...`);
+    console.warn(`⚠️  [DB NOTICE] Operating in EPHEMERAL IN-MEMORY database mode. Data will NOT persist across server restarts.`);
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     mongoMemoryServerInstance = await MongoMemoryServer.create();
     const memoryUri = mongoMemoryServerInstance.getUri();
@@ -104,11 +130,36 @@ export async function connectDB() {
   }
 }
 
+export function getDatabaseStatus() {
+  const readyState = mongoose.connection.readyState;
+  const isConnected = readyState === 1;
+  const isMemory = Boolean(mongoMemoryServerInstance);
+  const databaseName = isConnected ? mongoose.connection.name : null;
+  const host = isConnected ? (isMemory ? 'local-memory' : mongoose.connection.host) : null;
+
+  let storageMode = 'DISCONNECTED';
+  if (isConnected) {
+    storageMode = isMemory ? 'IN_MEMORY' : 'PERSISTENT_ATLAS';
+  }
+
+  return {
+    connected: isConnected,
+    readyState,
+    storageMode,
+    isMemory,
+    databaseName,
+    host
+  };
+}
+
 export async function disconnectDB() {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();
   }
   if (mongoMemoryServerInstance) {
-    await mongoMemoryServerInstance.stop();
+    try {
+      await mongoMemoryServerInstance.stop();
+    } catch {}
+    mongoMemoryServerInstance = null;
   }
 }

@@ -1,0 +1,1698 @@
+/* ==========================================================================
+   Sentinel Govern — Deterministic AI Governance Landing Page
+   Exact reproduction of cinematic reference design & motion system
+   Multi-Theme (Light / Dark) • Geist & Instrument Serif Typography
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+
+/* ─── 1. Design Tokens ─────────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg: #07090e;
+  --bg-trans: rgba(7, 9, 14, 0.85);
+  --bg-card: #0d111a;
+  --bg-card-subtle: #121724;
+  --bg-elevated: #161c2c;
+  
+  --bone: #ece8e0;
+  --bone-2: #c5c0b6;
+  --bone-3: #8e8a82;
+  --bone-4: #4d4a44;
+  
+  --border: rgba(236, 232, 224, 0.12);
+  --border-strong: rgba(236, 232, 224, 0.24);
+  --border-subtle: rgba(236, 232, 224, 0.06);
+  
+  /* Sentinel Brand Blue (Replacing harsh yellow button accents with high-contrast cobalt) */
+  --blue: #315efb;
+  --blue-hover: #234bd8;
+  --blue-glow: rgba(49, 94, 251, 0.45);
+  
+  --amber: #f59e0b;
+  --green: #10b981;
+  --green-glow: rgba(16, 185, 129, 0.25);
+  --red: #ef4444;
+  --red-glow: rgba(239, 68, 68, 0.25);
+  
+  --hud-bg: rgba(7, 9, 14, 0.75);
+  --screen-bg: #090c13;
+  --grain-opacity: 0.045;
+}
+
+[data-theme="light"] {
+  --bg: #f7f6f2;
+  --bg-trans: rgba(247, 246, 242, 0.9);
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f0ea;
+  --bg-elevated: #e8e6dd;
+  
+  --bone: #121316;
+  --bone-2: #323438;
+  --bone-3: #6b6964;
+  --bone-4: #b0aca4;
+  
+  --border: rgba(20, 20, 19, 0.12);
+  --border-strong: rgba(20, 20, 19, 0.25);
+  --border-subtle: rgba(20, 20, 19, 0.06);
+  
+  --blue: #2563eb;
+  --blue-hover: #1d4ed8;
+  --blue-glow: rgba(37, 99, 235, 0.25);
+  
+  --amber: #d97706;
+  --green: #059669;
+  --green-glow: rgba(5, 150, 105, 0.18);
+  --red: #dc2626;
+  --red-glow: rgba(220, 38, 38, 0.18);
+  
+  --hud-bg: rgba(247, 246, 242, 0.85);
+  --screen-bg: #ffffff;
+  --grain-opacity: 0.02;
+}
+
+/* ─── 2. Base & Typography ─────────────────────────────────────────────────── */
+.sentinel-landing {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--bone);
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sentinel-landing .mono {
+  font-family: 'Geist Mono', monospace;
+  font-feature-settings: 'tnum' 1;
+}
+
+.sentinel-landing .serif {
+  font-family: 'Instrument Serif', Georgia, serif;
+}
+
+.sentinel-landing .it {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Background Film Grain Overlay */
+.sentinel-landing .grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* ─── 3. Navigation Bar ────────────────────────────────────────────────────── */
+.sentinel-landing .nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  box-sizing: border-box;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 clamp(16px, 3.5vw, 48px);
+  background: var(--bg-trans);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.sentinel-landing .nav-left {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sentinel-landing .nav-center {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.sentinel-landing .nav-right {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sentinel-landing .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  text-decoration: none;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-bottom: none;
+  background: transparent;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sentinel-landing .brand-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 10px var(--blue);
+  flex-shrink: 0;
+}
+
+.sentinel-landing .brand-text-label {
+  white-space: nowrap;
+}
+
+.sentinel-landing .nav-links {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 32px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+  min-width: 0;
+}
+
+.sentinel-landing .nav-links a {
+  font-family: 'Geist', sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--bone-3);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+  padding: 4px 0;
+}
+
+.sentinel-landing .nav-links a:hover {
+  color: var(--bone);
+}
+
+.sentinel-landing .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.sentinel-landing .theme-toggle-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.sentinel-landing .theme-toggle-btn:hover {
+  border-color: var(--border);
+  background: var(--border-subtle);
+}
+
+.sentinel-landing .theme-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bone);
+  letter-spacing: 0.02em;
+}
+
+.sentinel-landing .menu-btn {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--bone);
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.sentinel-landing .menu-btn:hover {
+  background: var(--border-subtle);
+  border-color: var(--bone-3);
+}
+
+/* Mobile Navigation Dropdown */
+.sentinel-landing .mobile-nav-drawer {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  z-index: 99;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  animation: navDrawerFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes navDrawerFade {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sentinel-landing .mobile-nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sentinel-landing .mobile-nav-links a {
+  font-family: 'Geist Mono', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--bone-2);
+  text-decoration: none;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: color 0.2s ease;
+}
+
+.sentinel-landing .mobile-nav-links a:hover {
+  color: var(--bone);
+}
+
+.sentinel-landing .mobile-nav-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.sentinel-landing .mobile-nav-actions .btn {
+  justify-content: center;
+  width: 100%;
+}
+
+/* Anchor Target Offsets to prevent fixed nav overlap */
+.sentinel-landing [id] {
+  scroll-margin-top: 76px;
+}
+
+/* ─── 4. Reusable Buttons ──────────────────────────────────────────────────── */
+.sentinel-landing .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 7px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.sentinel-landing .btn-ghost {
+  color: var(--bone-2);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.sentinel-landing .btn-ghost:hover {
+  color: var(--bone);
+  background: var(--border-subtle);
+  border-color: var(--border);
+}
+
+/* Corrected from yellow to Sentinel signature Blue with high contrast */
+.sentinel-landing .btn-amber {
+  background: var(--blue);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  box-shadow: 0 0 20px -4px var(--blue-glow);
+}
+
+.sentinel-landing .btn-amber:hover {
+  background: var(--blue-hover);
+  box-shadow: 0 0 28px 0 var(--blue-glow);
+  transform: translateY(-1px);
+}
+
+.sentinel-landing .btn-line {
+  background: var(--bg-card);
+  color: var(--bone);
+  border: 1px solid var(--border-strong);
+}
+
+.sentinel-landing .btn-line:hover {
+  background: var(--bg-card-subtle);
+  border-color: var(--bone-2);
+  transform: translateY(-1px);
+}
+
+.sentinel-landing .btn-lg {
+  padding: 12px 22px;
+  font-size: 14.5px;
+  border-radius: 9px;
+}
+
+.sentinel-landing .arr {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.sentinel-landing .btn:hover .arr {
+  transform: translateX(3px);
+}
+
+.sentinel-landing .play {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
+  margin-right: 2px;
+}
+
+/* ─── 5. Hero Section & Interactive HUD ────────────────────────────────────── */
+.sentinel-landing .hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 120px 24px 80px;
+  overflow: hidden;
+}
+
+/* Canvas field for moving strings & flowing interactive lines */
+.sentinel-landing canvas#field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+/* Cinematic Letterbox borders */
+.sentinel-landing .letterbox {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.sentinel-landing .letterbox.top {
+  top: 72px;
+}
+
+.sentinel-landing .letterbox.bot {
+  bottom: 32px;
+}
+
+/* Viewfinder HUD */
+.sentinel-landing .hud {
+  position: absolute;
+  inset: 84px 32px 44px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Viewfinder Corner Crosshairs */
+.sentinel-landing .hud .c {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--bone-3);
+  opacity: 0.6;
+}
+
+.sentinel-landing .hud .c.tl {
+  top: 0;
+  left: 0;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+
+.sentinel-landing .hud .c.tr {
+  top: 0;
+  right: 0;
+  border-top: 1.5px solid;
+  border-right: 1.5px solid;
+}
+
+.sentinel-landing .hud .c.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom: 1.5px solid;
+  border-left: 1.5px solid;
+}
+
+.sentinel-landing .hud .c.br {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1.5px solid;
+  border-right: 1.5px solid;
+}
+
+/* Top-right telemetry readout */
+.sentinel-landing .hud-read {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--bone-3);
+  letter-spacing: 0.05em;
+}
+
+.sentinel-landing .hud-read .k {
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--bone-3);
+}
+
+.sentinel-landing .hud-read .v {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--bone);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.sentinel-landing .hud-read small {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--green);
+  border: 1px solid var(--green);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Bottom HUD bar */
+.sentinel-landing .hud-bot {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--bone-3);
+  letter-spacing: 0.06em;
+}
+
+.sentinel-landing .hud-bot .live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--red);
+  font-weight: 600;
+  animation: pulseLive 2s infinite ease-in-out;
+}
+
+@keyframes pulseLive {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Hero Content */
+.sentinel-landing .hero-inner {
+  position: relative;
+  z-index: 10;
+  max-width: 860px;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sentinel-landing .slate {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 11.5px;
+  color: var(--bone-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+
+.sentinel-landing .slate .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+.sentinel-landing .slate .sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--bone-4);
+}
+
+.sentinel-landing .title {
+  margin: 0 0 24px;
+  font-size: clamp(48px, 7.5vw, 92px);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  color: var(--bone);
+}
+
+.sentinel-landing .title .ln {
+  display: block;
+}
+
+.sentinel-landing .title .it {
+  font-size: 1.12em;
+  color: var(--bone);
+  text-shadow: 0 0 40px rgba(49, 94, 251, 0.2);
+}
+
+.sentinel-landing .hero-sub {
+  font-size: clamp(16px, 1.8vw, 19px);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--bone-2);
+  max-width: 660px;
+  margin: 0 auto 36px;
+}
+
+.sentinel-landing .hero-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.sentinel-landing .scroll-cue {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--bone-3);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  z-index: 5;
+}
+
+.sentinel-landing .scroll-cue i {
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(180deg, var(--bone-3), transparent);
+  animation: scrollDown 2s infinite ease-in-out;
+}
+
+@keyframes scrollDown {
+  0% { transform: scaleY(0); transform-origin: top; }
+  50% { transform: scaleY(1); transform-origin: top; }
+  50.1% { transform: scaleY(1); transform-origin: bottom; }
+  100% { transform: scaleY(0); transform-origin: bottom; }
+}
+
+/* ─── 6. Manifesto Section ─────────────────────────────────────────────────── */
+.sentinel-landing .manifesto {
+  position: relative;
+  padding: 140px clamp(24px, 6vw, 80px);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.sentinel-landing .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--bone-3);
+  margin-bottom: 28px;
+}
+
+.sentinel-landing .eyebrow b {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.sentinel-landing #manifesto {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(28px, 4.2vw, 52px);
+  line-height: 1.25;
+  color: var(--bone-2);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.sentinel-landing #manifesto .hl {
+  color: var(--bone);
+  text-decoration: underline;
+  text-decoration-color: var(--blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+/* ─── 7. Lifecycle (Acts) Pinned Interactive Showcase ──────────────────────── */
+.sentinel-landing .acts {
+  position: relative;
+  padding: 80px clamp(20px, 4vw, 48px) 140px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.sentinel-landing .acts-pin {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 56px;
+  align-items: start;
+}
+
+.sentinel-landing .acts-left {
+  position: sticky;
+  top: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 520px;
+}
+
+.sentinel-landing .act-num {
+  font-family: 'Geist Mono', monospace;
+  font-size: 80px;
+  font-weight: 700;
+  line-height: 0.85;
+  color: var(--border);
+  letter-spacing: -0.05em;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.sentinel-landing .act-num span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--blue);
+}
+
+.sentinel-landing .act-text {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.sentinel-landing #actKicker {
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 10px;
+}
+
+.sentinel-landing #actTitle {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(32px, 3.4vw, 44px);
+  font-weight: 400;
+  color: var(--bone);
+  line-height: 1.15;
+  margin: 0 0 16px;
+}
+
+.sentinel-landing #actBody {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--bone-2);
+  margin: 0 0 20px;
+}
+
+.sentinel-landing .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sentinel-landing .tags .tag {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--bone-2);
+}
+
+/* Interactive Reel Selector */
+.sentinel-landing .reel {
+  display: flex;
+  gap: 8px;
+  margin-top: 40px;
+}
+
+.sentinel-landing .reel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--bone-3);
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sentinel-landing .reel-btn:hover {
+  border-color: var(--bone-2);
+  color: var(--bone);
+}
+
+.sentinel-landing .reel-btn.active {
+  background: var(--blue);
+  color: #ffffff;
+  border-color: var(--blue);
+  box-shadow: 0 0 16px var(--blue-glow);
+}
+
+/* Right Console Screen */
+.sentinel-landing .screen {
+  background: var(--screen-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.4);
+}
+
+.sentinel-landing .screen-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--bg-card-subtle);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--bone-3);
+}
+
+.sentinel-landing .screen-bar .lights {
+  display: flex;
+  gap: 6px;
+}
+
+.sentinel-landing .screen-bar .lights i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.sentinel-landing .screen-body {
+  position: relative;
+  min-height: 440px;
+  padding: 24px;
+}
+
+.sentinel-landing .panel {
+  display: none;
+  animation: fadeIn 0.35s ease forwards;
+}
+
+.sentinel-landing .panel.on {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Panel 0: Registration */
+.sentinel-landing .risk-stamp {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  border: 2px solid var(--red);
+  color: var(--red);
+  font-family: 'Geist Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  text-align: center;
+  transform: rotate(6deg);
+  letter-spacing: 0.08em;
+}
+
+.sentinel-landing .json {
+  font-family: 'Geist Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--bone-2);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.sentinel-landing .json .jk { color: var(--blue); }
+.sentinel-landing .json .js { color: var(--green); }
+.sentinel-landing .json .jn { color: var(--amber); }
+
+/* Panel 1: Fairness Studio */
+.sentinel-landing .fair-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.sentinel-landing .big-metric {
+  font-family: 'Geist Mono', monospace;
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--bone);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.sentinel-landing .big-metric small {
+  font-size: 12px;
+  color: var(--green);
+  border: 1px solid var(--green);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sentinel-landing .bars {
+  position: relative;
+  height: 160px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 0 20px;
+  margin-bottom: 12px;
+}
+
+.sentinel-landing .bar-col {
+  width: 44px;
+  border-radius: 4px 4px 0 0;
+  background: var(--blue);
+  transition: height 1s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.sentinel-landing .bars .thr {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1.5px dashed var(--amber);
+  color: var(--amber);
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  text-align: right;
+  padding-right: 8px;
+}
+
+.sentinel-landing .bar-labels {
+  display: flex;
+  justify-content: space-around;
+  font-size: 11px;
+  color: var(--bone-3);
+  margin-bottom: 24px;
+}
+
+.sentinel-landing .fair-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+.sentinel-landing .fair-row .v {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bone);
+  margin-top: 2px;
+}
+
+/* Panel 2: Policy Gates */
+.sentinel-landing .rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.sentinel-landing .rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.sentinel-landing .rule-status {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.sentinel-landing .rule-status.pass {
+  background: var(--green-glow);
+  color: var(--green);
+}
+
+.sentinel-landing .gate-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.sentinel-landing .gate-verdict.open {
+  border-color: var(--green);
+}
+
+.sentinel-landing #verdictText {
+  font-size: 20px;
+  color: var(--bone);
+}
+
+/* Panel 3: Quorum */
+.sentinel-landing .quorum {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.sentinel-landing .q-signer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.sentinel-landing .q-signer-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sentinel-landing .q-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sentinel-landing .quorum-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.sentinel-landing .quorum-bar .track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sentinel-landing .quorum-bar .track i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--blue);
+  border-radius: 10px;
+  transition: width 0.8s ease;
+}
+
+/* Panel 4: Telemetry */
+.sentinel-landing .tele-head {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+  font-size: 11px;
+}
+
+.sentinel-landing .tele-head .v {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--bone);
+  margin-top: 3px;
+}
+
+.sentinel-landing .chart {
+  height: 180px;
+  width: 100%;
+}
+
+.sentinel-landing #teleSvg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Panel 5: Audit Chain Mini */
+.sentinel-landing .chain-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.sentinel-landing .chain-mini-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+
+/* ─── 8. Tamper-Evident Audit Section ──────────────────────────────────────── */
+.sentinel-landing .sec {
+  position: relative;
+  padding: 100px clamp(20px, 4vw, 48px);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.sentinel-landing .sec-head {
+  max-width: 680px;
+  margin-bottom: 48px;
+}
+
+.sentinel-landing .sec-head h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(38px, 5.5vw, 68px);
+  font-weight: 400;
+  line-height: 1.05;
+  color: var(--bone);
+  margin: 0 0 18px;
+}
+
+.sentinel-landing .sec-head p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--bone-2);
+  margin: 0;
+}
+
+/* Cryptographic Chain Blocks */
+.sentinel-landing .chain {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.sentinel-landing .chain-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.sentinel-landing .chain-block.tampered {
+  border-color: var(--red);
+  background: rgba(239, 68, 68, 0.05);
+  box-shadow: 0 0 20px var(--red-glow);
+}
+
+.sentinel-landing .chain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+
+.sentinel-landing .chain-hash {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--bone-3);
+  word-break: break-all;
+  margin: 8px 0;
+}
+
+.sentinel-landing .chain-block.tampered .chain-hash {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.sentinel-landing .tamper-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--border-subtle);
+  border: 1px solid var(--border);
+  color: var(--bone-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sentinel-landing .tamper-btn:hover {
+  background: var(--red);
+  color: #ffffff;
+  border-color: var(--red);
+}
+
+.sentinel-landing .chain-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.sentinel-landing .chain-status.tampered {
+  border-color: var(--red);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.sentinel-landing #chainMsg {
+  font-size: 22px;
+  color: var(--bone);
+  margin-top: 4px;
+}
+
+.sentinel-landing .chain-status.tampered #chainMsg {
+  color: var(--red);
+}
+
+/* ─── 9. Drift & Atomic Rollback Section ───────────────────────────────────── */
+.sentinel-landing .drift {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 36px;
+  align-items: start;
+}
+
+.sentinel-landing .drift-chart {
+  position: relative;
+  height: 320px;
+  background: var(--screen-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.sentinel-landing .drift-chart .lab {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  font-size: 11.5px;
+  color: var(--bone-3);
+}
+
+.sentinel-landing canvas#driftCv {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sentinel-landing .flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(239, 68, 68, 0.25);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sentinel-landing .flash.active {
+  opacity: 1;
+}
+
+.sentinel-landing .drift-side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sentinel-landing #dPsi {
+  font-family: 'Geist Mono', monospace;
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--bone);
+  margin-top: 4px;
+}
+
+.sentinel-landing .versions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sentinel-landing .ver {
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  color: var(--bone-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sentinel-landing .ver.live {
+  border-color: var(--blue);
+  color: var(--bone);
+  background: rgba(49, 94, 251, 0.08);
+}
+
+.sentinel-landing .ver.live::after {
+  content: '● ACTIVE';
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sentinel-landing .drift-log {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--bone-3);
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ─── 10. Platform Bento Grid Section ──────────────────────────────────────── */
+.sentinel-landing .bento {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.sentinel-landing .bento .card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 280px;
+  transition: all 0.3s ease;
+}
+
+.sentinel-landing .bento .card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.sentinel-landing .bento .card.c1 {
+  grid-column: span 2;
+  position: relative;
+  overflow: hidden;
+}
+
+.sentinel-landing .bento .card.c2 {
+  grid-column: span 1;
+}
+
+.sentinel-landing .bento .card.c3 {
+  grid-column: span 1;
+}
+
+.sentinel-landing .bento .card.c4 {
+  grid-column: span 1;
+}
+
+.sentinel-landing .bento .card.c5 {
+  grid-column: span 1;
+}
+
+.sentinel-landing .bento .card h4 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--bone);
+  margin: 14px 0 8px;
+}
+
+.sentinel-landing .bento .card p {
+  font-size: 14px;
+  color: var(--bone-2);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.sentinel-landing .big-num {
+  font-family: 'Geist Mono', monospace;
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--blue);
+  line-height: 1;
+  margin: 14px 0 6px;
+}
+
+.sentinel-landing .viz.ring {
+  width: 90px;
+  height: 90px;
+  margin: 8px 0;
+}
+
+.sentinel-landing .dossier {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 8px;
+}
+
+.sentinel-landing .dossier i {
+  width: 14px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--bg-card-subtle);
+}
+
+/* ─── 11. Regulatory Frameworks Marquee ────────────────────────────────────── */
+.sentinel-landing .marq {
+  position: relative;
+  border-block: 1px solid var(--border);
+  padding: 24px 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.sentinel-landing .marq-track {
+  display: flex;
+  gap: 48px;
+  width: max-content;
+  animation: marqueeLoop 28s linear infinite;
+}
+
+.sentinel-landing .marq-track span {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bone-3);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 48px;
+}
+
+.sentinel-landing .marq-track span::after {
+  content: '●';
+  font-size: 6px;
+  color: var(--blue);
+}
+
+@keyframes marqueeLoop {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ─── 12. Finale Call-to-Action ────────────────────────────────────────────── */
+.sentinel-landing .finale {
+  padding: 140px clamp(24px, 6vw, 80px);
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sentinel-landing .finale h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: clamp(48px, 6.8vw, 84px);
+  font-weight: 400;
+  line-height: 1.02;
+  color: var(--bone);
+  margin: 0 0 20px;
+}
+
+.sentinel-landing .finale p {
+  font-size: 17px;
+  color: var(--bone-2);
+  max-width: 580px;
+  margin: 0 auto 36px;
+}
+
+/* ─── 13. Footer ───────────────────────────────────────────────────────────── */
+.sentinel-landing footer {
+  border-top: 1px solid var(--border);
+  padding: 64px clamp(20px, 4vw, 48px) 32px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.sentinel-landing .foot-grid {
+  display: grid;
+  grid-template-columns: 2fr repeat(4, 1fr);
+  gap: 40px;
+  margin-bottom: 56px;
+}
+
+.sentinel-landing .foot-grid h5 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  margin: 0 0 16px;
+}
+
+.sentinel-landing .foot-grid ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sentinel-landing .foot-grid a {
+  font-size: 13px;
+  color: var(--bone-3);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.sentinel-landing .foot-grid a:hover {
+  color: var(--bone);
+}
+
+.sentinel-landing .badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.sentinel-landing .badges .tag {
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--bone-3);
+}
+
+.sentinel-landing .foot-base {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--bone-3);
+}
+
+.sentinel-landing .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+}
+
+.sentinel-landing .status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* ─── 14. Responsive Layout Breakpoints ────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .sentinel-landing .acts-pin {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .sentinel-landing .acts-left {
+    position: relative;
+    top: 0;
+    min-height: auto;
+  }
+  .sentinel-landing .drift {
+    grid-template-columns: 1fr;
+  }
+  .sentinel-landing .bento {
+    grid-template-columns: 1fr;
+  }
+  .sentinel-landing .bento .card.c1,
+  .sentinel-landing .bento .card.c2,
+  .sentinel-landing .bento .card.c3,
+  .sentinel-landing .bento .card.c4,
+  .sentinel-landing .bento .card.c5 {
+    grid-column: span 1;
+  }
+  .sentinel-landing .foot-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .sentinel-landing .nav {
+    grid-template-columns: auto 1fr;
+  }
+  .sentinel-landing .nav-center {
+    display: none !important;
+  }
+  .sentinel-landing .menu-btn {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 768px) {
+  .sentinel-landing .hud-read {
+    display: none;
+  }
+  .sentinel-landing .fair-row {
+    grid-template-columns: 1fr;
+  }
+  .sentinel-landing .chain {
+    grid-template-columns: 1fr;
+  }
+  .sentinel-landing .foot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .sentinel-landing .nav {
+    padding: 0 14px;
+  }
+  .sentinel-landing .nav-actions {
+    gap: 6px;
+  }
+  .sentinel-landing .nav-signin-btn {
+    display: none;
+  }
+  .sentinel-landing .theme-toggle-label {
+    display: none;
+  }
+  .sentinel-landing .theme-toggle-btn {
+    padding: 6px 8px;
+  }
+  .sentinel-landing .nav-console-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}

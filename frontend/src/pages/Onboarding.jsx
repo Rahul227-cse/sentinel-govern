@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
 import {
@@ -78,17 +78,50 @@ const TEAMS = [
 export default function Onboarding() {
   const { user, isAuthenticated, loading: authLoading, submitOnboarding, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [step, setStep] = useState(1);
-  const [selectedRole, setSelectedRole] = useState(user?.role && user.role !== 'PLATFORM_ADMIN' ? user.role : 'ML_LEAD');
-  const [selectedDept, setSelectedDept] = useState(user?.department || 'AI / ML');
-  const [selectedTeam, setSelectedTeam] = useState(user?.team || 'AI Platform');
-  const [customTeam, setCustomTeam] = useState('');
-  const [teamLead, setTeamLead] = useState(user?.teamLead || '');
-  const [noTeamLead, setNoTeamLead] = useState(false);
+  const incomingData = location.state?.onboardingData;
+
+  const [step, setStep] = useState(location.state?.step || 1);
+  const [selectedRole, setSelectedRole] = useState(
+    incomingData?.selectedRole || (user?.role && user.role !== 'PLATFORM_ADMIN' ? user.role : 'ML_LEAD')
+  );
+  const [selectedDept, setSelectedDept] = useState(
+    incomingData?.selectedDept || user?.department || 'AI / ML'
+  );
+  const [selectedTeam, setSelectedTeam] = useState(
+    incomingData?.selectedTeam || user?.team || 'AI Platform'
+  );
+  const [customTeam, setCustomTeam] = useState(
+    incomingData?.customTeam || ''
+  );
+  const [teamLead, setTeamLead] = useState(
+    incomingData?.teamLead || user?.teamLead || ''
+  );
+  const [noTeamLead, setNoTeamLead] = useState(
+    incomingData?.noTeamLead ?? false
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Sync defaults if user object updates and no incoming state was explicitly passed
+  useEffect(() => {
+    if (user && !incomingData) {
+      if (user.role && user.role !== 'PLATFORM_ADMIN' && selectedRole === 'ML_LEAD') {
+        setSelectedRole(user.role);
+      }
+      if (user.department && selectedDept === 'AI / ML') {
+        setSelectedDept(user.department);
+      }
+      if (user.team && selectedTeam === 'AI Platform') {
+        setSelectedTeam(user.team);
+      }
+      if (user.teamLead && !teamLead) {
+        setTeamLead(user.teamLead);
+      }
+    }
+  }, [user]);
 
   // If user is already verified and completed onboarding, redirect to application
   useEffect(() => {
@@ -124,6 +157,23 @@ export default function Onboarding() {
 
   const handleBack = () => {
     setError('');
+    if (step === 1) {
+      // Return to signup, passing current selections so they can be preserved
+      navigate('/signup', {
+        state: {
+          fromOnboarding: true,
+          onboardingData: {
+            selectedRole,
+            selectedDept,
+            selectedTeam,
+            customTeam,
+            teamLead,
+            noTeamLead
+          }
+        }
+      });
+      return;
+    }
     setStep(s => Math.max(s - 1, 1));
   };
 
@@ -700,29 +750,46 @@ export default function Onboarding() {
           {step > 1 ? (
             <button
               type="button"
+              id="onboarding-back-btn"
               onClick={handleBack}
               disabled={submitting}
               className="btn btn-secondary"
+              aria-label="Previous onboarding step"
             >
               <ChevronLeft size={15} /> Back
             </button>
-          ) : <div />}
+          ) : (
+            <button
+              type="button"
+              id="onboarding-back-to-signup"
+              onClick={handleBack}
+              disabled={submitting}
+              className="btn btn-secondary"
+              aria-label="Back to Sign Up"
+            >
+              <ChevronLeft size={15} /> Back to Sign Up
+            </button>
+          )}
 
           {step < 5 ? (
             <button
               type="button"
+              id="onboarding-continue"
               onClick={handleNext}
               className="btn btn-primary"
+              aria-label="Continue to next onboarding step"
             >
               Continue <ChevronRight size={15} />
             </button>
           ) : (
             <button
               type="button"
+              id="onboarding-complete"
               onClick={handleFinish}
               disabled={submitting}
               className="btn btn-primary"
               style={{ padding: '10px 24px', fontSize: 14 }}
+              aria-label="Complete Setup"
             >
               {submitting ? (
                 <>

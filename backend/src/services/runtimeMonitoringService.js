@@ -5,18 +5,12 @@ import { Monitoring } from '../models/Monitoring.js';
 import { createDriftIncident } from './incidentService.js';
 import { createOrUpdateDriftReport } from './reportService.js';
 import { WORKLOAD_DEFINITIONS, WORKLOAD_IDS } from './workloadService.js';
+import { retrieveReferenceDatasetRecords } from './referenceDatasetService.js';
 import { recordAuditEvent } from './auditEngine.js';
 import mongoose from 'mongoose';
 
 const MONITORING_SERVICE_URL = process.env.MONITORING_SERVICE_URL || 'http://127.0.0.1:8001';
 const TIMEOUT_MS = Number(process.env.MONITORING_TIMEOUT_MS) || 15000;
-const REQUIRED_COLUMNS = [
-  'fraud_risk_score',
-  'ml_supervised_score',
-  'ml_anomaly_score',
-  'rule_heuristic_score',
-  'latency_ms'
-];
 
 /**
  * Service to orchestrate real Evidently runtime telemetry ingestion.
@@ -82,7 +76,10 @@ export async function ingestRuntimeTelemetryBatch({
     throw err;
   }
 
-  // Resolve effective workload ID and its monitored columns
+  // 1. Retrieve reference dataset records for this version
+  const referenceRecords = await retrieveReferenceDatasetRecords(version, model);
+
+  // 2. Resolve effective workload ID
   let effectiveWorkloadId = workloadId;
   const sample = runtimeRecords[0] || {};
   if (!effectiveWorkloadId) {
@@ -92,47 +89,77 @@ export async function ingestRuntimeTelemetryBatch({
       effectiveWorkloadId = WORKLOAD_IDS.INSURANCE;
     } else if (sample.MonthlyCharges !== undefined || /Churn/i.test(model.name)) {
       effectiveWorkloadId = WORKLOAD_IDS.CHURN;
+    } else if (model.type) {
+      effectiveWorkloadId = model.type.toLowerCase().replace(/[\s_]+/g, '-');
     } else {
       effectiveWorkloadId = WORKLOAD_IDS.FRAUD;
     }
   }
 
-  const workloadDef = WORKLOAD_DEFINITIONS[effectiveWorkloadId] || WORKLOAD_DEFINITIONS[WORKLOAD_IDS.FRAUD];
-  const requiredColumns = workloadDef.monitoredFeatures || REQUIRED_COLUMNS;
-
-  // Verify first record has required columns and all records are well-formed
-  for (const col of requiredColumns) {
-    if (runtimeRecords[0][col] === undefined || runtimeRecords[0][col] === null) {
-      const err = new Error(`Runtime records missing required monitored column: ${col}`);
+  // 3. Quick sanity check on runtime records format
+  for (let i = 0; i < Math.min(runtimeRecords.length, 10); i++) {
+    if (typeof runtimeRecords[i] !== 'object' || runtimeRecords[i] === null) {
+      const err = new Error(`Invalid record format at index ${i}: expected an object`);
       err.statusCode = 400;
       throw err;
     }
   }
 
-  // Quick sanity check on data values
-  for (let i = 0; i < Math.min(runtimeRecords.length, 10); i++) {
-    for (const col of requiredColumns) {
-      const val = runtimeRecords[i][col];
-      if (typeof val !== 'number' && isNaN(Number(val))) {
-        const err = new Error(`Invalid non-numeric value in column "${col}" at index ${i}`);
-        err.statusCode = 400;
-        throw err;
-      }
-    }
+  // 3b. Verify records contain monitored feature columns
+  const workloadDef = WORKLOAD_DEFINITIONS[effectiveWorkloadId] || null;
+  const availableRuntimeCols = Object.keys(runtimeRecords[0] || {});
+  const expectedCols = version.referenceDataset?.featureColumns?.length > 0
+    ? version.referenceDataset.featureColumns
+    : (workloadDef?.monitoredFeatures || []);
+
+  const nonFeatureRegex = /^(target|label|actual|ground_truth|y_true|y_pred|prediction|predicted|decision|probability|probability_of_default|model|threshold|band|features|latency_ms)$/i;
+  const nonTargetExpected = expectedCols.filter(col => !nonFeatureRegex.test(col.trim()));
+
+  const matchingCols = nonTargetExpected.filter(col => availableRuntimeCols.includes(col));
+  if (nonTargetExpected.length > 0 && matchingCols.length === 0) {
+    const err = new Error(
+      `Runtime records missing required monitored column: expected at least one feature column among [${nonTargetExpected.slice(0, 5).join(', ')}] but received columns [${availableRuntimeCols.join(', ')}]`
+    );
+    err.statusCode = 400;
+    throw err;
   }
 
-  // Compute performance telemetry
+  // 4. Compute performance telemetry
   const predictionVolume = runtimeRecords.length;
-  const totalLatency = runtimeRecords.reduce((acc, r) => acc + (Number(r.latency_ms) || 0), 0);
-  const avgLatencyMs = Number((totalLatency / predictionVolume).toFixed(2));
-  const errorRate = 0.002;
-  const estimatedAccuracy = 0.895;
+  const latencies = runtimeRecords
+    .map(r => Number(r.latency_ms))
+    .filter(l => !isNaN(l) && l > 0);
+  const avgLatencyMs = latencies.length > 0
+    ? Number((latencies.reduce((a, b) => a + b, 0) / latencies.length).toFixed(2))
+    : null;
 
-  // Send batch to Evidently Monitoring Service
+  // Real ground-truth accuracy / error rate evaluation only if ground-truth labels are present
+  // Never fabricate errorRate or estimatedAccuracy
+  let errorRate = null;
+  let estimatedAccuracy = null;
+  const targetCol = version.referenceDataset?.targetColumn || 'target';
+  const predCol = version.apiConfig?.responseMapping?.predictionField || 'prediction';
+  const labeledRecords = runtimeRecords.filter(r => r[targetCol] !== undefined && r[predCol] !== undefined);
+  if (labeledRecords.length >= 5) {
+    const matches = labeledRecords.filter(r => String(r[targetCol]) === String(r[predCol])).length;
+    estimatedAccuracy = Number((matches / labeledRecords.length).toFixed(4));
+    errorRate = Number((1 - estimatedAccuracy).toFixed(4));
+  }
+
+  // 5. Send batch to Evidently Monitoring Service with dynamic reference data
   let driftAnalysis;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    const payload = {
+      model_id: String(model._id),
+      version_id: String(version._id),
+      workload_id: effectiveWorkloadId,
+      runtime_data: runtimeRecords,
+      reference_data: referenceRecords || null,
+      monitored_columns: nonTargetExpected.length > 0 ? nonTargetExpected : null
+    };
 
     const response = await fetch(`${MONITORING_SERVICE_URL}/analyze-drift`, {
       method: 'POST',
@@ -140,10 +167,7 @@ export async function ingestRuntimeTelemetryBatch({
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        workload_id: effectiveWorkloadId,
-        runtime_data: runtimeRecords
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal
     });
 
@@ -176,8 +200,11 @@ export async function ingestRuntimeTelemetryBatch({
     throw err;
   }
 
+  const isInsufficient = driftAnalysis.status === 'insufficient_data';
   const driftDetected = Boolean(driftAnalysis.drift_detected);
-  const driftStatus = driftDetected ? 'DRIFT_DETECTED' : 'HEALTHY';
+  const driftStatus = driftDetected 
+    ? 'DRIFT_DETECTED' 
+    : (isInsufficient ? 'INSUFFICIENT_DATA' : 'HEALTHY');
   const driftedColumns = Array.isArray(driftAnalysis.drifted_columns) ? driftAnalysis.drifted_columns : [];
   const metrics = Array.isArray(driftAnalysis.metrics) ? driftAnalysis.metrics : [];
 
@@ -193,6 +220,8 @@ export async function ingestRuntimeTelemetryBatch({
 
   const batchId = `BATCH-EVD-${Date.now()}`;
 
+  const referenceDatasetVersion = version.referenceDataset?.filename || version.version || 'baseline-v1.0';
+
   // Persist Telemetry document
   const telemetry = await Telemetry.create({
     modelId: model._id,
@@ -207,13 +236,14 @@ export async function ingestRuntimeTelemetryBatch({
     driftedColumns,
     reportArtifactPath: driftAnalysis.report || `runtime_drift_report_${effectiveWorkloadId}.html`,
     isSyntheticWalkthroughTraffic: Boolean(isSynthetic),
-    referenceDatasetVersion: workloadDef.referenceDatasetVersion || 'baseline-v1.0',
+    referenceDatasetVersion,
     performanceTelemetry: {
       predictionVolume,
       avgLatencyMs,
       errorRate,
       estimatedAccuracy
     },
+    runtimeRecords: runtimeRecords.slice(0, 100),
     recordedAt: new Date()
   });
 
@@ -314,7 +344,7 @@ export async function ingestRuntimeTelemetryBatch({
     });
   }
 
-  monitoring.healthStatus = driftDetected ? 'CRITICAL' : 'HEALTHY';
+  monitoring.healthStatus = driftDetected ? 'CRITICAL' : (isInsufficient ? 'WARNING' : 'HEALTHY');
   monitoring.driftDetected = driftDetected;
   monitoring.driftMethod = 'EVIDENTLY';
   monitoring.latestPsi = null;
@@ -332,6 +362,7 @@ export async function ingestRuntimeTelemetryBatch({
     incident: generatedIncident,
     report: generatedReport,
     driftDetected,
+    driftStatus: telemetry.driftStatus,
     driftedColumns,
     monitoringSource: 'EVIDENTLY',
     recordsAnalyzed: predictionVolume,

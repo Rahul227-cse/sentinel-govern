@@ -62,6 +62,10 @@ export default function Dashboard() {
     return (
       <div className="page-container">
         <PageHeader
+          breadcrumbs={[
+            { label: role === 'PLATFORM_ADMIN' ? 'Permitted Oversight' : 'Workspace', to: '/app' },
+            { label: 'Executive Dashboard' }
+          ]}
           title="Sentinel Govern Control Plane"
           subtitle="Continuous organizational oversight of model risk, policy gates, approvals, and compliance."
         />
@@ -79,6 +83,10 @@ export default function Dashboard() {
     return (
       <div className="page-container">
         <PageHeader
+          breadcrumbs={[
+            { label: role === 'PLATFORM_ADMIN' ? 'Permitted Oversight' : 'Workspace', to: '/app' },
+            { label: 'Executive Dashboard' }
+          ]}
           title="Sentinel Govern Control Plane"
           subtitle="Continuous organizational oversight of model risk, policy gates, approvals, and compliance."
         />
@@ -103,6 +111,10 @@ export default function Dashboard() {
     <div className="page-container">
       {/* Page Header with Role-Specific Primary Action */}
       <PageHeader
+        breadcrumbs={[
+          { label: role === 'PLATFORM_ADMIN' ? 'Permitted Oversight' : 'Workspace', to: '/app' },
+          { label: 'Executive Dashboard' }
+        ]}
         title="Sentinel Govern Control Plane"
         subtitle={roleSubtitles[role] || 'Continuous organizational oversight of AI system lifecycle and compliance.'}
       >

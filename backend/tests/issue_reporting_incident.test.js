@@ -636,7 +636,7 @@ test('Rollback: 19. Valid approved baseline can still be used for rollback by au
   assert.strictEqual(String(refreshedModel.currentProductionVersionId), String(v1Approved._id));
   assert.strictEqual(refreshedV1.lifecycleStatus, 'IN_PRODUCTION');
   assert.strictEqual(refreshedV1.deploymentStatus, 'IN_PRODUCTION');
-  assert.strictEqual(refreshedV2.lifecycleStatus, 'DEPRECATED');
+  assert.strictEqual(refreshedV2.lifecycleStatus, 'RETIRED');
   assert.strictEqual(refreshedV2.deploymentStatus, 'ROLLED_BACK');
   assert.strictEqual(refreshedIncident.status, 'MITIGATED');
 });

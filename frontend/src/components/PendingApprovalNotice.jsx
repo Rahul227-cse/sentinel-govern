@@ -37,11 +37,11 @@ export default function PendingApprovalNotice() {
       <div style={{
         maxWidth: '500px',
         width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 'var(--radius-lg, 12px)',
-        border: '1px solid var(--border-color, #E2E8F0)',
+        backgroundColor: 'var(--color-surface)',
+        borderRadius: 'var(--radius-modal)',
+        border: '1px solid var(--color-border)',
         padding: '40px 32px',
-        boxShadow: 'var(--shadow-md)',
+        boxShadow: 'var(--shadow-dropdown)',
         textAlign: 'center'
       }}>
         <div style={{

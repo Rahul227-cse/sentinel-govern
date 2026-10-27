@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { getModels, getIssues, createIssue, updateIssue, escalateIssueToIncident } from '../services/api';
+import { 
+  getModels, 
+  getIssues, 
+  createIssue, 
+  updateIssue, 
+  escalateIssueToIncident,
+  downloadIssueReportPdf,
+  downloadIssueReportMarkdown,
+  downloadIssueReportJson
+} from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getRoleCapabilities } from '../utils/permissions';
 import PageHeader from '../components/PageHeader';
@@ -14,7 +23,9 @@ import {
   RefreshCw, 
   PlusCircle, 
   ArrowUpRight,
-  Send
+  Send,
+  Download,
+  FileText
 } from 'lucide-react';
 
 const ISSUE_TYPES = [
@@ -61,6 +72,40 @@ export default function IssueReporting() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewLoading, setReviewLoading] = useState(false);
   const [escalating, setEscalating] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!selectedIssue) return;
+    try {
+      setExportingPdf(true);
+      await downloadIssueReportPdf(selectedIssue._id, selectedIssue.reportNumber);
+    } catch (err) {
+      console.error('Failed to export issue PDF:', err);
+      alert(`Export Failed: ${err.message}`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleDownloadMarkdown = async () => {
+    if (!selectedIssue) return;
+    try {
+      await downloadIssueReportMarkdown(selectedIssue._id, selectedIssue.reportNumber);
+    } catch (err) {
+      console.error('Failed to export issue Markdown:', err);
+      alert(`Export Failed: ${err.message}`);
+    }
+  };
+
+  const handleDownloadJson = async () => {
+    if (!selectedIssue) return;
+    try {
+      await downloadIssueReportJson(selectedIssue._id, selectedIssue.reportNumber);
+    } catch (err) {
+      console.error('Failed to export issue JSON:', err);
+      alert(`Export Failed: ${err.message}`);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -200,36 +245,35 @@ export default function IssueReporting() {
     <div className="page-container">
       <PageHeader
         breadcrumbs={[
-          { label: 'Governance', link: '/app' },
+          { label: 'Governance', to: '/app' },
           { label: 'Issue Reports' }
         ]}
         title="Stakeholder Issue Reporting & Governance Review"
         subtitle="Responsible AI telemetry ingestion, frontline concern logging, and committee escalation pathways."
-        action={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setActiveTab(activeTab === 'list' ? 'create' : 'list')}
-              className={`btn ${activeTab === 'create' ? 'btn-secondary' : 'btn-primary'} btn-sm`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              {activeTab === 'create' ? (
-                <span>View Reports Queue</span>
-              ) : (
-                <>
-                  <PlusCircle size={14} /> Report New Issue
-                </>
-              )}
-            </button>
-            <button 
-              onClick={loadData} 
-              className="btn btn-secondary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
-          </div>
-        }
-      />
+      >
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            onClick={() => setActiveTab(activeTab === 'list' ? 'create' : 'list')}
+            className={`btn ${activeTab === 'create' ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            {activeTab === 'create' ? (
+              <span>View Reports Queue</span>
+            ) : (
+              <>
+                <PlusCircle size={14} /> Report New Issue
+              </>
+            )}
+          </button>
+          <button 
+            onClick={loadData} 
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+          </button>
+        </div>
+      </PageHeader>
 
       {submitSuccess && (
         <div style={{
@@ -491,7 +535,7 @@ export default function IssueReporting() {
                 <div className="card" style={{ padding: '24px' }}>
                   
                   {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px', gap: '16px', flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                         <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
@@ -504,6 +548,38 @@ export default function IssueReporting() {
                         Affected Model: <strong style={{ color: 'var(--text-primary)' }}>{selectedIssue.modelId?.name || 'Unknown'}</strong>
                         {selectedIssue.versionId && <span> • Version: <strong style={{ color: 'var(--text-primary)' }}>{selectedIssue.versionId.version}</strong></span>}
                       </div>
+                    </div>
+
+                    {/* Export Actions: PDF, Markdown, JSON */}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        id="export-issue-pdf-btn"
+                        onClick={handleDownloadPdf}
+                        disabled={exportingPdf}
+                        className="btn btn-primary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, padding: '5px 12px' }}
+                        title="Download official A4 issue report PDF with selectable text"
+                      >
+                        <FileText size={13} /> {exportingPdf ? 'Exporting...' : 'Export PDF'}
+                      </button>
+                      <button
+                        id="export-issue-md-btn"
+                        onClick={handleDownloadMarkdown}
+                        className="btn btn-secondary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                        title="Export Markdown report"
+                      >
+                        <Download size={13} /> Markdown
+                      </button>
+                      <button
+                        id="export-issue-json-btn"
+                        onClick={handleDownloadJson}
+                        className="btn btn-secondary btn-sm"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                        title="Export raw JSON record"
+                      >
+                        <Download size={13} /> JSON
+                      </button>
                     </div>
                   </div>
 

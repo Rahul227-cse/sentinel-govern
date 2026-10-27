@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { resetPassword } from '../services/api';
 import ThemeToggle from '../components/ThemeToggle';
+import AnimatedCircularFrame from '../components/AnimatedCircularFrame';
 import { Shield, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowLeft, Loader2 } from 'lucide-react';
+import '../styles/AuthAnimated.css';
 
 function PasswordStrength({ password }) {
   if (!password) return null;
@@ -14,8 +16,10 @@ function PasswordStrength({ password }) {
   ];
   const passed = checks.filter(c => c.ok).length;
   const colors = ['var(--color-danger)', 'var(--color-warning)', 'var(--color-warning)', 'var(--color-success)', 'var(--color-success)'];
+  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+
   return (
-    <div style={{ marginTop: 8 }}>
+    <div style={{ marginTop: 6, marginBottom: 8 }}>
       <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
         {[0, 1, 2, 3].map(i => (
           <div
@@ -24,12 +28,17 @@ function PasswordStrength({ password }) {
               flex: 1,
               height: 3,
               borderRadius: 2,
-              backgroundColor: i < passed ? colors[passed] : 'var(--color-border)',
+              backgroundColor: i < passed ? colors[passed] : 'var(--auth-border)',
               transition: 'background 200ms'
             }}
           />
         ))}
       </div>
+      {passed > 0 && (
+        <div style={{ fontSize: 11, color: colors[passed], fontWeight: 600, marginBottom: 4 }}>
+          {labels[passed]} password
+        </div>
+      )}
     </div>
   );
 }
@@ -53,41 +62,47 @@ export default function ResetPasswordPage() {
   // No token = invalid link
   if (!token) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        backgroundColor: 'var(--color-bg)',
-        color: 'var(--color-text)',
-        padding: '24px 28px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-            <div style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-              <Shield size={15} strokeWidth={2.4} />
+      <div className="auth-page-wrapper">
+        <header className="auth-top-bar">
+          <Link to="/" className="auth-brand-logo" aria-label="Sentinel Govern Home">
+            <div className="auth-brand-icon">
+              <Shield size={17} strokeWidth={2.4} />
             </div>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>SENTINEL GOVERN</span>
+            <span className="auth-brand-text">SENTINEL GOVERN</span>
           </Link>
-          <ThemeToggle />
-        </div>
-
-        <div style={{ maxWidth: 400, margin: '0 auto', textAlign: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', padding: '36px 28px' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-            <AlertCircle size={22} color="var(--color-danger)" />
+          <div className="auth-top-actions">
+            <ThemeToggle />
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>Invalid reset link</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 22 }}>
-            This password reset link is missing or invalid. Please request a new one.
-          </p>
-          <Link to="/forgot-password" className="btn btn-primary" style={{ padding: '8px 18px', fontSize: 13 }}>
-            Request new link
-          </Link>
-        </div>
+        </header>
 
-        <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--color-text-muted)' }}>
+        <main className="auth-main-stage">
+          <AnimatedCircularFrame mode="login">
+            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 14px',
+                color: 'var(--color-danger)'
+              }}>
+                <AlertCircle size={28} />
+              </div>
+              <h1 className="auth-title" style={{ fontSize: 20 }}>
+                Invalid reset link
+              </h1>
+              <p className="auth-subtitle" style={{ marginBottom: 24 }}>
+                This password reset link is missing or invalid. Please request a new one.
+              </p>
+              <Link to="/forgot-password" className="auth-btn-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
+                Request new link
+              </Link>
+            </div>
+          </AnimatedCircularFrame>
+        </main>
+
+        <footer className="auth-footer">
           © 2026 Sentinel Govern. AI Governance & Lifecycle Platform.
-        </div>
+        </footer>
       </div>
     );
   }
@@ -127,58 +142,37 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'space-between',
-      backgroundColor: 'var(--color-bg)',
-      color: 'var(--color-text)',
-      padding: '24px 28px'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-          <div style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-            <Shield size={15} strokeWidth={2.4} />
+    <div className="auth-page-wrapper">
+      <header className="auth-top-bar">
+        <Link to="/" className="auth-brand-logo" aria-label="Sentinel Govern Home">
+          <div className="auth-brand-icon">
+            <Shield size={17} strokeWidth={2.4} />
           </div>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>SENTINEL GOVERN</span>
+          <span className="auth-brand-text">SENTINEL GOVERN</span>
         </Link>
-        <ThemeToggle />
-      </div>
+        <div className="auth-top-actions">
+          <ThemeToggle />
+        </div>
+      </header>
 
-      <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '24px 0' }}>
-        <div style={{
-          backgroundColor: 'var(--color-surface)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--color-border)',
-          padding: '32px 28px',
-          boxShadow: 'var(--shadow-sm)'
-        }}>
+      <main className="auth-main-stage">
+        <AnimatedCircularFrame mode="login">
           {!success ? (
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', marginBottom: 6 }}>
+              <h1 className="auth-title">
                 Set new password
               </h1>
-              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 22 }}>
+              <p className="auth-subtitle">
                 Enter your new password below. All existing sessions will be invalidated for security.
               </p>
 
               {error && (
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'flex-start',
-                  backgroundColor: 'var(--color-danger-bg)',
-                  border: '1px solid var(--color-danger-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '10px 12px',
-                  marginBottom: 16
-                }}>
-                  <AlertCircle size={14} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: 1 }} />
+                <div className="auth-error-banner" role="alert">
+                  <AlertCircle size={15} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--color-danger-text)' }}>{error}</div>
+                    <div>{error}</div>
                     {/expired|invalid/i.test(error) && (
-                      <Link to="/forgot-password" style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>
+                      <Link to="/forgot-password" className="auth-link" style={{ marginTop: 4, display: 'inline-block', fontSize: 12 }}>
                         Request a new link →
                       </Link>
                     )}
@@ -187,9 +181,9 @@ export default function ResetPasswordPage() {
               )}
 
               <form onSubmit={handleSubmit} noValidate>
-                <div className="form-group" style={{ marginBottom: 12 }}>
-                  <label htmlFor="reset-password" className="form-label">New password</label>
-                  <div style={{ position: 'relative' }}>
+                <div className="auth-form-group">
+                  <label htmlFor="reset-password" className="auth-label">New password</label>
+                  <div className="auth-input-wrapper">
                     <input
                       id="reset-password"
                       ref={passwordRef}
@@ -199,25 +193,29 @@ export default function ResetPasswordPage() {
                       onChange={e => { setPassword(e.target.value); setFieldErrors(p => ({ ...p, password: '' })); }}
                       placeholder="Enter new password"
                       disabled={submitting}
-                      className="form-input"
-                      style={{ width: '100%', paddingRight: 40, borderColor: fieldErrors.password ? 'var(--color-danger)' : undefined }}
+                      className={`auth-input ${fieldErrors.password ? 'has-error' : ''}`}
+                      style={{ paddingRight: 40 }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(s => !s)}
-                      aria-label={showPassword ? 'Hide' : 'Show'}
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', padding: 4 }}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="auth-eye-btn"
                     >
                       {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
-                  {fieldErrors.password && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.password}</div>}
+                  {fieldErrors.password && (
+                    <div className="auth-field-error">
+                      <AlertCircle size={11} /> {fieldErrors.password}
+                    </div>
+                  )}
                   <PasswordStrength password={password} />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 20 }}>
-                  <label htmlFor="reset-confirm" className="form-label">Confirm password</label>
-                  <div style={{ position: 'relative' }}>
+                <div className="auth-form-group" style={{ marginBottom: 20 }}>
+                  <label htmlFor="reset-confirm" className="auth-label">Confirm password</label>
+                  <div className="auth-input-wrapper">
                     <input
                       id="reset-confirm"
                       type={showConfirm ? 'text' : 'password'}
@@ -226,19 +224,23 @@ export default function ResetPasswordPage() {
                       onChange={e => { setConfirmPassword(e.target.value); setFieldErrors(p => ({ ...p, confirmPassword: '' })); }}
                       placeholder="Confirm password"
                       disabled={submitting}
-                      className="form-input"
-                      style={{ width: '100%', paddingRight: 40, borderColor: fieldErrors.confirmPassword ? 'var(--color-danger)' : undefined }}
+                      className={`auth-input ${fieldErrors.confirmPassword ? 'has-error' : ''}`}
+                      style={{ paddingRight: 40 }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirm(s => !s)}
-                      aria-label={showConfirm ? 'Hide' : 'Show'}
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', padding: 4 }}
+                      aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                      className="auth-eye-btn"
                     >
                       {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
-                  {fieldErrors.confirmPassword && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.confirmPassword}</div>}
+                  {fieldErrors.confirmPassword && (
+                    <div className="auth-field-error">
+                      <AlertCircle size={11} /> {fieldErrors.confirmPassword}
+                    </div>
+                  )}
                   {confirmPassword && confirmPassword === password && !fieldErrors.confirmPassword && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
                       <CheckCircle2 size={12} color="var(--color-success)" />
@@ -251,11 +253,10 @@ export default function ResetPasswordPage() {
                   id="reset-submit"
                   type="submit"
                   disabled={submitting}
-                  className="btn btn-primary"
-                  style={{ width: '100%', padding: '10px 0', fontSize: 13 }}
+                  className="auth-btn-primary"
                 >
                   {submitting ? (
-                    <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Updating password…</>
+                    <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Updating password…</>
                   ) : (
                     'Reset Password'
                   )}
@@ -263,44 +264,52 @@ export default function ResetPasswordPage() {
               </form>
             </div>
           ) : (
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
               <div style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                backgroundColor: 'var(--color-success-bg)',
-                border: '1px solid var(--color-success-border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 16px',
+                margin: '0 auto 14px',
                 color: 'var(--color-success)'
               }}>
-                <CheckCircle2 size={22} />
+                <CheckCircle2 size={28} />
               </div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>Password updated</h2>
-              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 22 }}>
+              <h2 className="auth-title" style={{ fontSize: 20 }}>
+                Password updated
+              </h2>
+              <p className="auth-subtitle" style={{ lineHeight: 1.6, marginBottom: 24 }}>
                 Your password has been changed successfully. You can now sign in with your new credentials.
               </p>
-              <Link to="/login" className="btn btn-primary" style={{ padding: '8px 20px', fontSize: 13 }}>
+              <Link to="/login" className="auth-btn-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
                 Sign In
               </Link>
             </div>
           )}
-        </div>
 
-        {!success && (
-          <div style={{ textAlign: 'center', marginTop: 18 }}>
-            <Link to="/login" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>
-              <ArrowLeft size={13} /> Back to Sign In
-            </Link>
-          </div>
-        )}
-      </div>
+          {!success && (
+            <div style={{
+              borderTop: '1px solid var(--auth-border-subtle)',
+              marginTop: 22,
+              paddingTop: 16,
+              textAlign: 'center'
+            }}>
+              <Link to="/login" className="auth-link" style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 13,
+                textDecoration: 'none'
+              }}>
+                <ArrowLeft size={14} /> Back to Sign In
+              </Link>
+            </div>
+          )}
+        </AnimatedCircularFrame>
+      </main>
 
-      <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--color-text-muted)' }}>
+      <footer className="auth-footer">
         © 2026 Sentinel Govern. AI Governance & Lifecycle Platform.
-      </div>
+      </footer>
     </div>
   );
 }

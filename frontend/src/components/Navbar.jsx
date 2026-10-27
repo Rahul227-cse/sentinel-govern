@@ -5,9 +5,9 @@ import { formatRoleLabel } from '../utils/formatters';
 import GoogleSignInButton from './GoogleSignInButton';
 import ThemeToggle from './ThemeToggle';
 import NotificationBell from './NotificationBell';
-import { Shield, CheckCircle2, Clock } from 'lucide-react';
+import { Shield, CheckCircle2, Clock, Menu } from 'lucide-react';
 
-export default function Navbar() {
+export default function Navbar({ onMobileMenuToggle }) {
   const { currentRole, switchRole, roles } = useRole();
   const { user, isAuthenticated } = useAuth();
 
@@ -15,6 +15,16 @@ export default function Navbar() {
     <header className="navbar" role="banner">
       {/* Left side: Context & Workspace Breadcrumb */}
       <div className="navbar-left">
+        {onMobileMenuToggle && (
+          <button
+            type="button"
+            className="navbar-mobile-toggle"
+            onClick={onMobileMenuToggle}
+            aria-label="Open navigation menu"
+          >
+            <Menu size={18} />
+          </button>
+        )}
         <div className="navbar-workspace-context">
           <span className="navbar-workspace-name">Sentinel Govern</span>
           <span className="navbar-domain-divider">/</span>

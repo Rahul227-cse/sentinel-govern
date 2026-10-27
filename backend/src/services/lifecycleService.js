@@ -1,3 +1,5 @@
+import net from 'node:net';
+import dns from 'node:dns/promises';
 import { Model } from '../models/Model.js';
 import { ModelVersion } from '../models/ModelVersion.js';
 import { Policy } from '../models/Policy.js';
@@ -12,7 +14,7 @@ export const LIFECYCLE_STAGES = [
   'PENDING_APPROVAL',
   'APPROVED',
   'IN_PRODUCTION',
-  'DEPRECATED'
+  'RETIRED'
 ];
 
 /**
@@ -26,7 +28,8 @@ export async function transitionVersionLifecycle({
   role = 'SYSTEM',
   rationale = ''
 }) {
-  if (!LIFECYCLE_STAGES.includes(targetStatus)) {
+  const normalizedTarget = targetStatus === 'DEPRECATED' ? 'RETIRED' : targetStatus;
+  if (!LIFECYCLE_STAGES.includes(normalizedTarget)) {
     throw new Error(`Invalid lifecycle status: ${targetStatus}`);
   }
 
@@ -132,7 +135,7 @@ export async function transitionVersionLifecycle({
       });
 
       if (previousProdVersion) {
-        previousProdVersion.lifecycleStatus = 'DEPRECATED';
+        previousProdVersion.lifecycleStatus = 'RETIRED';
         previousProdVersion.deploymentStatus = 'RETIRED';
         await previousProdVersion.save();
 
@@ -168,7 +171,7 @@ export async function transitionVersionLifecycle({
           environment: 'PRODUCTION',
           deployedBy: actor,
           status: 'ACTIVE',
-          endpointUrl: process.env.EXTERNAL_AI_URL || 'http://127.0.0.1:8000',
+          endpointUrl: model.apiConfig?.endpointUrl || process.env.EXTERNAL_AI_URL || '',
           trafficPercentage: 100,
           deployedAt: new Date()
         });
@@ -184,6 +187,7 @@ export async function transitionVersionLifecycle({
       await model.save();
       break;
 
+    case 'RETIRED':
     case 'DEPRECATED':
       if (version.deploymentStatus === 'IN_PRODUCTION') {
         version.deploymentStatus = 'RETIRED';
@@ -195,15 +199,15 @@ export async function transitionVersionLifecycle({
   }
 
   const previousState = version.lifecycleStatus;
-  version.lifecycleStatus = targetStatus;
+  version.lifecycleStatus = normalizedTarget;
   await version.save();
 
   // Audit log the transition
   await recordAuditEvent({
     actor,
     role,
-    action: targetStatus === 'IN_PRODUCTION' ? 'DEPLOYMENT_COMPLETED' : 
-            targetStatus === 'APPROVED' ? 'APPROVAL_GRANTED' : 'LIFECYCLE_TRANSITION',
+    action: normalizedTarget === 'IN_PRODUCTION' ? 'DEPLOYMENT_COMPLETED' : 
+            normalizedTarget === 'APPROVED' ? 'APPROVAL_GRANTED' : 'LIFECYCLE_TRANSITION',
     entityType: 'ModelVersion',
     entityId: version._id,
     payload: {
@@ -212,19 +216,109 @@ export async function transitionVersionLifecycle({
       versionId: String(version._id),
       version: version.version,
       previousStatus: previousState,
-      newStatus: targetStatus,
+      newStatus: normalizedTarget,
       rationale
     }
   });
+
+  // Notify stakeholders on production deployment
+  if (normalizedTarget === 'IN_PRODUCTION') {
+    try {
+      const { dispatchNotification } = await import('./notificationService.js');
+      await dispatchNotification({
+        recipientRole: 'ML_LEAD',
+        title: `Production promotion completed: ${model.name} ${version.version}`,
+        message: `Model "${model.name}" version ${version.version} has been deployed to production.`,
+        type: 'LIFECYCLE_PROMOTION',
+        severity: 'INFO',
+        targetUrl: '/app/monitoring',
+        modelId: model._id,
+        versionId: version._id,
+        idempotencyKey: `promoted_prod_ml_${version._id}`,
+        actor
+      });
+      await dispatchNotification({
+        recipientRole: 'GOVERNANCE_OFFICER',
+        title: `Production promotion completed: ${model.name} ${version.version}`,
+        message: `Model "${model.name}" version ${version.version} has been promoted to live production.`,
+        type: 'LIFECYCLE_PROMOTION',
+        severity: 'INFO',
+        targetUrl: '/app/monitoring',
+        modelId: model._id,
+        versionId: version._id,
+        idempotencyKey: `promoted_prod_gov_${version._id}`,
+        actor
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] Lifecycle promotion notification warning:', notifErr.message);
+    }
+  }
 
 
   return version;
 }
 
 /**
- * Validates endpoint URL for security (SSRF prevention).
+ * Determines whether an IP address is private, loopback, link-local, carrier-grade NAT, or cloud metadata.
  */
-export function validateEndpointUrl(urlStr) {
+export function isPrivateOrInternalIp(ip) {
+  if (!ip || typeof ip !== 'string') return true;
+  const cleanIp = ip.toLowerCase().trim();
+
+  // IPv4-mapped IPv6, e.g. ::ffff:127.0.0.1 or ::ffff:169.254.169.254
+  if (cleanIp.startsWith('::ffff:')) {
+    return isPrivateOrInternalIp(cleanIp.slice(7));
+  }
+
+  if (net.isIPv4(cleanIp)) {
+    const parts = cleanIp.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) return true;
+
+    // 0.0.0.0/8 (Current / broadcast)
+    if (parts[0] === 0) return true;
+    // 10.0.0.0/8 (Private RFC 1918)
+    if (parts[0] === 10) return true;
+    // 127.0.0.0/8 (Loopback)
+    if (parts[0] === 127) return true;
+    // 169.254.0.0/16 (Link-local & cloud metadata)
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    // 172.16.0.0/12 (Private RFC 1918: 172.16.x.x - 172.31.x.x)
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.168.0.0/16 (Private RFC 1918)
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    // 100.64.0.0/10 (Carrier-Grade NAT)
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+    // TEST-NET & documentation IPs
+    if (parts[0] === 192 && parts[1] === 0 && parts[2] === 2) return true;
+    if (parts[0] === 198 && parts[1] === 51 && parts[2] === 100) return true;
+    if (parts[0] === 203 && parts[1] === 0 && parts[2] === 113) return true;
+    // Multicast & Reserved (224.0.0.0/4 and 240.0.0.0/4)
+    if (parts[0] >= 224) return true;
+
+    return false;
+  }
+
+  if (net.isIPv6(cleanIp)) {
+    // Loopback ::1 and unspecified ::
+    if (cleanIp === '::1' || cleanIp === '::' || cleanIp === '0:0:0:0:0:0:0:1') return true;
+    // Unique local fc00::/7 (fc.. or fd..)
+    if (cleanIp.startsWith('fc') || cleanIp.startsWith('fd')) return true;
+    // Link-local fe80::/10 (fe8, fe9, fea, feb)
+    if (/^fe[89ab]/.test(cleanIp)) return true;
+    // Multicast ff00::/8
+    if (cleanIp.startsWith('ff')) return true;
+
+    return false;
+  }
+
+  return true; // Unknown/invalid IP format is blocked
+}
+
+/**
+ * Validates endpoint URL for security (SSRF prevention).
+ * Synchronous URL syntax and static host validation.
+ */
+export function validateEndpointUrl(urlStr, options = {}) {
   if (!urlStr || typeof urlStr !== 'string') {
     throw new Error('Endpoint URL must be a non-empty string');
   }
@@ -238,25 +332,64 @@ export function validateEndpointUrl(urlStr) {
     throw new Error(`Invalid URL protocol "${parsed.protocol}". Only HTTP and HTTPS are permitted.`);
   }
 
-  // SSRF Protection in production
-  if (process.env.NODE_ENV === 'production') {
-    const hostname = parsed.hostname.toLowerCase();
-    const blockedHosts = ['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254'];
-    if (blockedHosts.includes(hostname) || hostname.endsWith('.internal.invalid')) {
-      throw new Error(`Endpoint URL "${urlStr}" references prohibited local or link-local host in production.`);
+  const hostname = parsed.hostname.toLowerCase();
+  const rawHost = hostname.replace(/^\[|\]$/g, '');
+
+  // Cloud metadata protection across ALL environments (never permitted)
+  if (
+    rawHost === '169.254.169.254' ||
+    rawHost === 'metadata.google.internal' ||
+    rawHost === 'instance-data' ||
+    rawHost.endsWith('.internal.invalid')
+  ) {
+    throw new Error(`SSRF BLOCKED: Prohibited cloud metadata destination: "${urlStr}"`);
+  }
+
+  // Enforce private network & loopback block in production or when allowLocal is explicitly false
+  const enforceBlock = process.env.NODE_ENV === 'production' || options.allowLocal === false;
+
+  if (enforceBlock) {
+    const blockedHosts = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'];
+    if (blockedHosts.includes(hostname) || blockedHosts.includes(rawHost) || hostname.endsWith('.local') || hostname.endsWith('.localhost')) {
+      throw new Error(`SSRF BLOCKED: Endpoint URL "${urlStr}" references prohibited local host.`);
     }
 
-    // RFC 1918 Private IPv4 address protection in production
-    const isPrivateIp = 
-      /^10\./.test(hostname) ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^127\./.test(hostname) ||
-      /^169\.254\./.test(hostname);
-    if (isPrivateIp) {
-      throw new Error(`Endpoint URL "${urlStr}" references prohibited private network address in production.`);
+    if (net.isIP(rawHost) && isPrivateOrInternalIp(rawHost)) {
+      throw new Error(`SSRF BLOCKED: Endpoint URL "${urlStr}" references prohibited internal IP address: ${rawHost}`);
     }
   }
+
+  return true;
+}
+
+/**
+ * Asynchronously validates endpoint URL including DNS resolution against internal addresses (DNS rebinding prevention).
+ */
+export async function validateSafeEndpointUrl(urlStr, options = {}) {
+  validateEndpointUrl(urlStr, options);
+
+  const parsed = new URL(urlStr);
+  const hostname = parsed.hostname.toLowerCase();
+  const enforceBlock = process.env.NODE_ENV === 'production' || options.allowLocal === false;
+
+  if (enforceBlock && !net.isIP(hostname)) {
+    try {
+      const records = await dns.lookup(hostname, { all: true });
+      for (const rec of records) {
+        if (isPrivateOrInternalIp(rec.address)) {
+          throw new Error(
+            `SSRF BLOCKED: Hostname "${hostname}" resolves to prohibited internal address: ${rec.address}`
+          );
+        }
+      }
+    } catch (err) {
+      if (err.message.includes('SSRF BLOCKED')) {
+        throw err;
+      }
+      throw new Error(`SSRF BLOCKED: Unable to resolve hostname "${hostname}": ${err.message}`);
+    }
+  }
+
   return true;
 }
 

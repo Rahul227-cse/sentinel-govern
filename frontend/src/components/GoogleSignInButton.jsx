@@ -1,21 +1,34 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { Loader2, AlertCircle } from 'lucide-react';
 
-export default function GoogleSignInButton({ onAuthSuccess }) {
+/**
+ * GoogleSignInButton
+ *
+ * Official Google Identity Services (GIS) button.
+ * Renders a high-contrast, authentic white/light-neutral button with the official
+ * multicolored Google 'G' logo and dark readable text in BOTH Dark and Light modes.
+ */
+export default function GoogleSignInButton({
+  onAuthSuccess,
+  text = 'signin_with',
+  width = 320
+}) {
   const { loginWithGoogle, loading, error, clearError } = useAuth();
+  const { theme } = useTheme();
   const buttonRef = useRef(null);
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  const handleCredentialResponse = async (response) => {
+  const handleCredentialResponse = useCallback(async (response) => {
     if (response?.credential) {
       const res = await loginWithGoogle(response.credential);
       if (res.success && onAuthSuccess) {
         onAuthSuccess(res.user);
       }
     }
-  };
+  }, [loginWithGoogle, onAuthSuccess]);
 
   useEffect(() => {
     if (!clientId) {
@@ -35,14 +48,19 @@ export default function GoogleSignInButton({ onAuthSuccess }) {
             cancel_on_tap_outside: true
           });
 
-          // Render official Google button into container
+          // Clear previous render to ensure clean re-theme
+          buttonRef.current.innerHTML = '';
+
+          // Render official Google button:
+          // 'outline' theme ensures a crisp white surface with dark readable text
+          // and the original multicolored Google 'G' icon across all themes.
           window.google.accounts.id.renderButton(buttonRef.current, {
-            theme: 'filled_blue',
+            theme: 'outline',
             size: 'large',
             shape: 'rectangular',
-            text: 'signin_with',
+            text: text, // 'signin_with' or 'signup_with'
             logo_alignment: 'left',
-            width: 320
+            width: width
           });
         } catch (err) {
           console.warn('[GIS Init Warning]', err);
@@ -58,31 +76,70 @@ export default function GoogleSignInButton({ onAuthSuccess }) {
           clearInterval(checkInterval);
           initGis();
         }
-      }, 300);
+      }, 250);
     }
 
     return () => {
       if (checkInterval) clearInterval(checkInterval);
     };
-  }, [clientId]);
+  }, [clientId, handleCredentialResponse, theme, text, width]);
 
   if (!clientId) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '12px', color: '#DC2626', backgroundColor: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA' }}>
-        <AlertCircle size={14} />
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '9px 14px',
+        fontSize: '12px',
+        color: 'var(--color-danger-text)',
+        backgroundColor: 'var(--color-danger-bg)',
+        borderRadius: 'var(--radius-sm)',
+        border: '1px solid var(--color-danger-border)',
+        maxWidth: '320px'
+      }}>
+        <AlertCircle size={15} style={{ flexShrink: 0 }} />
         <span>VITE_GOOGLE_CLIENT_ID is not configured.</span>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{
+      display: 'inline-flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '6px',
+      width: '100%',
+      maxWidth: `${width}px`
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        width: '100%'
+      }}>
         {/* Container for official Google Identity Services button */}
-        <div ref={buttonRef} style={{ minHeight: '38px', minWidth: '180px' }} />
+        <div
+          ref={buttonRef}
+          style={{
+            minHeight: '40px',
+            minWidth: `${Math.min(width, 240)}px`,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        />
 
         {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '12px',
+            color: 'var(--auth-text-muted)'
+          }}>
             <Loader2 size={16} className="spin-animation" />
             <span>Verifying...</span>
           </div>
@@ -90,22 +147,34 @@ export default function GoogleSignInButton({ onAuthSuccess }) {
       </div>
 
       {error && (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '6px', 
-          fontSize: '11px', 
-          color: 'var(--danger)', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '11.5px',
+          color: 'var(--color-danger-text)',
           marginTop: '4px',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          padding: '4px 8px',
-          borderRadius: '4px'
+          backgroundColor: 'var(--color-danger-bg)',
+          border: '1px solid var(--color-danger-border)',
+          padding: '6px 10px',
+          borderRadius: '6px',
+          width: '100%'
         }}>
-          <AlertCircle size={12} />
-          <span>{error}</span>
-          <button 
-            onClick={clearError} 
-            style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '0 2px' }}
+          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{error}</span>
+          <button
+            type="button"
+            onClick={clearError}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-danger-text)',
+              cursor: 'pointer',
+              padding: '0 4px',
+              fontSize: '14px',
+              lineHeight: 1
+            }}
+            aria-label="Dismiss error"
           >
             ×
           </button>

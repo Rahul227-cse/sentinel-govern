@@ -792,15 +792,33 @@ ${recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 /**
  * Lists all reports with optional filters.
  */
-export async function getGovernanceReports({ modelId, reportType, limit = 50 } = {}) {
+export async function getGovernanceReports({ modelId, versionId, batchId, telemetryId, incidentId, reportType, limit = 50 } = {}) {
   const filter = {};
   if (modelId) filter.modelId = modelId;
+  if (versionId) filter.versionId = versionId;
   if (reportType) filter.reportType = reportType;
+  if (incidentId) filter.incidentId = incidentId;
+  if (telemetryId) filter.telemetryId = telemetryId;
+
+  if (batchId) {
+    const { Telemetry } = await import('../models/Telemetry.js');
+    const tele = await Telemetry.findOne({ batchId });
+    if (tele) {
+      filter.$or = [
+        { telemetryId: tele._id },
+        { _id: tele.reportId },
+        { 'driftAnalysis.batchId': batchId }
+      ];
+    } else {
+      filter['driftAnalysis.batchId'] = batchId;
+    }
+  }
 
   return Report.find(filter)
     .populate('modelId', 'name riskLevel lifecycleStatus')
     .populate('versionId', 'version lifecycleStatus deploymentStatus')
     .populate('incidentId', 'incidentNumber severity status recommendedAction')
+    .populate('telemetryId', 'batchId sampleSize driftStatus aggregatePsi recordedAt')
     .sort({ createdAt: -1 })
     .limit(Number(limit));
 }
@@ -809,13 +827,21 @@ export async function getGovernanceReports({ modelId, reportType, limit = 50 } =
  * Retrieves a single report by ID or reportNumber.
  */
 export async function getReportById(reportId) {
-  const query = mongoose.Types.ObjectId.isValid(reportId)
-    ? { _id: reportId }
-    : { reportNumber: reportId };
+  if (!reportId) return null;
+  const resolvedId = (typeof reportId === 'object' && reportId !== null)
+    ? (reportId._id || reportId.id || reportId.reportNumber || reportId.reportId)
+    : String(reportId).trim();
+
+  if (!resolvedId) return null;
+
+  const query = mongoose.Types.ObjectId.isValid(resolvedId)
+    ? { _id: resolvedId }
+    : { reportNumber: resolvedId };
 
   return Report.findOne(query)
     .populate('modelId', 'name riskLevel lifecycleStatus purpose owner team')
     .populate('versionId', 'version lifecycleStatus deploymentStatus')
-    .populate('incidentId', 'incidentNumber severity status recommendedAction mitigationNotes');
+    .populate('incidentId', 'incidentNumber severity status recommendedAction mitigationNotes')
+    .populate('telemetryId', 'batchId sampleSize driftStatus aggregatePsi recordedAt');
 }
 

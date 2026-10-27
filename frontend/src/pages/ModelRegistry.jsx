@@ -213,6 +213,10 @@ export default function ModelRegistry() {
     <div className="page-container">
       {/* Header */}
       <PageHeader
+        breadcrumbs={[
+          { label: user?.role === 'PLATFORM_ADMIN' ? 'Permitted Oversight' : 'Workspace', to: '/app' },
+          { label: 'Model Registry' }
+        ]}
         title="Model Registry"
         subtitle="Authoritative inventory of registered AI systems, governing risk tiers, and lifecycle statuses."
       >

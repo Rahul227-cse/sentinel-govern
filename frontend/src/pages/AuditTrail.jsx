@@ -135,8 +135,8 @@ export default function AuditTrail() {
     <div className="page-container">
       <PageHeader
         breadcrumbs={[
-          { label: 'Governance', link: '/app' },
-          { label: 'Audit Trail' }
+          { label: 'Governance', to: '/app' },
+          { label: 'Audit Trail & Ledger' }
         ]}
         title="Cryptographic Audit Ledger"
         subtitle="Tamper-evident SHA-256 hash-chained immutable sequence of all lifecycle transitions and compliance gates."

@@ -322,8 +322,8 @@ export default function AdminUsers() {
     <div className="page-container" style={{ position: 'relative' }}>
       <PageHeader
         breadcrumbs={[
-          { label: 'Admin', link: '/app' },
-          { label: 'Users' }
+          { label: 'Administration', to: '/admin/users' },
+          { label: 'Users & Roles' }
         ]}
         title="Platform User Administration"
         subtitle="Manage authenticated identity records, lifecycle access states, and enterprise governance role bindings."

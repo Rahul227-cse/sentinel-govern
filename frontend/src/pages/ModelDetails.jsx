@@ -7,7 +7,9 @@ import {
   getEvaluations,
   getApprovals,
   getPolicies,
-  updateModelPolicy
+  updateModelPolicy,
+  uploadReferenceDataset,
+  getReferenceDataset
 } from '../services/api';
 import { RiskBadge, StatusBadge } from '../components/RiskBadge';
 import LifecycleStepper from '../components/LifecycleStepper';
@@ -30,7 +32,9 @@ import {
   RefreshCw,
   X,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  FileCheck
 } from 'lucide-react';
 
 export default function ModelDetails() {
@@ -62,6 +66,34 @@ export default function ModelDetails() {
   const [availablePolicies, setAvailablePolicies] = useState([]);
   const [selectedPolicyToAssign, setSelectedPolicyToAssign] = useState('');
   const [policySubmitting, setPolicySubmitting] = useState(false);
+
+  // Reference dataset upload state
+  const [datasetUploading, setDatasetUploading] = useState(false);
+  const [datasetUploadError, setDatasetUploadError] = useState(null);
+  const [datasetUploadSuccess, setDatasetUploadSuccess] = useState(null);
+
+  const handleDatasetFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setDatasetUploading(true);
+      setDatasetUploadError(null);
+      setDatasetUploadSuccess(null);
+
+      const formData = new FormData();
+      formData.append('dataset', file);
+
+      await uploadReferenceDataset(id, selectedVersionId, formData);
+      setDatasetUploadSuccess(`Successfully uploaded ${file.name} as reference baseline.`);
+      await loadModelDetails(selectedVersionId);
+    } catch (err) {
+      setDatasetUploadError(err.message || 'Failed to upload reference dataset');
+    } finally {
+      setDatasetUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const handleOpenAssignPolicyModal = async () => {
     try {
@@ -221,8 +253,8 @@ export default function ModelDetails() {
       {/* Header */}
       <PageHeader
         breadcrumbs={[
-          { to: '/app/registry', label: 'Model Registry' },
-          { label: model.name }
+          { label: 'Model Registry', to: '/app/registry' },
+          { label: model?.name || 'Model Details' }
         ]}
         title={model.name}
         subtitle={model.purpose}
@@ -632,6 +664,98 @@ export default function ModelDetails() {
                     Requires Governance Officer to assign policy
                   </span>
                 )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reference Baseline Dataset Card */}
+      {currentVersion && (
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-header">
+            <div className="card-title">
+              <Database size={15} color="var(--accent-primary)" />
+              <span>Reference Baseline Dataset (Evidently Monitoring)</span>
+            </div>
+            {capabilities.canCreateVersions && (
+              <label 
+                className={`btn btn-secondary btn-sm ${datasetUploading ? 'loading' : ''}`}
+                style={{ cursor: datasetUploading ? 'wait' : 'pointer', margin: 0 }}
+              >
+                <Upload size={13} />
+                <span>{datasetUploading ? 'Uploading...' : 'Upload Reference CSV / XLSX'}</span>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx"
+                  onChange={handleDatasetFileUpload}
+                  disabled={datasetUploading}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            )}
+          </div>
+
+          {datasetUploadSuccess && (
+            <div style={{ padding: '8px 14px', marginBottom: '12px', borderRadius: '4px', backgroundColor: 'var(--success-bg)', color: 'var(--success-text)', fontSize: '12px' }}>
+              {datasetUploadSuccess}
+            </div>
+          )}
+
+          {datasetUploadError && (
+            <div style={{ padding: '8px 14px', marginBottom: '12px', borderRadius: '4px', backgroundColor: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: '12px' }}>
+              {datasetUploadError}
+            </div>
+          )}
+
+          {currentVersion.referenceDataset?.filename ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', padding: '6px 0' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Dataset File</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                  {currentVersion.referenceDataset.filename}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Sample Count</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
+                  {currentVersion.referenceDataset.rowCount?.toLocaleString() || 'N/A'} rows
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Feature Columns</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
+                  {currentVersion.referenceDataset.featureColumns?.length || 0} features
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Target / Ground Truth</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
+                  {currentVersion.referenceDataset.targetColumn || 'None detected'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Data Hash (SHA-256)</div>
+                <div style={{ fontSize: '11px', fontFamily: 'monospace', marginTop: '2px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }} title={currentVersion.referenceDataset.dataHash}>
+                  {currentVersion.referenceDataset.dataHash ? `${currentVersion.referenceDataset.dataHash.slice(0, 18)}...` : 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Uploaded At</div>
+                <div style={{ fontSize: '12px', marginTop: '2px', color: 'var(--text-secondary)' }}>
+                  {currentVersion.referenceDataset.uploadedAt ? new Date(currentVersion.referenceDataset.uploadedAt).toLocaleString() : 'N/A'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '12px 14px', borderRadius: '4px', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>
+                No custom reference baseline dataset uploaded for version {currentVersion.version}. Evidently runtime monitoring will use the system baseline dataset fallback.
               </div>
             </div>
           )}

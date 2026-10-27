@@ -9,3 +9,13 @@ node_modules/
 # Logs
 npm-debug.log*
 *.log
+
+# Local uploads and user-provided datasets
+uploads/
+backend/uploads/
+
+# Local database/model backups
+backend/backups/
+
+# Generated project artifacts
+*.log

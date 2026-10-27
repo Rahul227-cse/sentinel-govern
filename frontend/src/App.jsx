@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RoleProvider } from './context/RoleContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -71,11 +71,16 @@ function RootDispatcher() {
  */
 function PublicOnlyRoute({ children }) {
   const { user, isAuthenticated, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return null;
 
   if (isAuthenticated && user && user.status === 'ACTIVE') {
     if (!user.onboardingCompleted) {
+      // Allow viewing signup page if onboarding is incomplete (e.g. user navigated Back from onboarding)
+      if (location.pathname === '/signup') {
+        return children;
+      }
       return <Navigate to="/onboarding" replace />;
     }
     const dest = user.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app';

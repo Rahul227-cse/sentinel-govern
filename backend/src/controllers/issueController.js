@@ -1,4 +1,5 @@
 import * as issueService from '../services/issueService.js';
+import { generateIssueReportPdf, generateIssueReportMarkdown } from '../services/pdfService.js';
 
 export async function createIssueReport(req, res) {
   try {
@@ -117,4 +118,45 @@ export async function escalateIssueToIncident(req, res) {
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
+}
+
+export async function exportIssueReport(req, res) {
+  try {
+    const issue = await issueService.getIssueReportById({
+      issueId: req.params.id,
+      user: req.user
+    });
+
+    if (!issue) {
+      return res.status(404).json({ success: false, error: 'Issue report not found' });
+    }
+
+    const reportNumClean = (issue.reportNumber || 'Issue_Report').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const format = (req.query.format || (req.headers.accept?.includes('application/pdf') ? 'pdf' : (req.headers.accept?.includes('text/markdown') ? 'markdown' : 'json'))).toLowerCase();
+
+    if (format === 'pdf') {
+      const pdfBuffer = await generateIssueReportPdf(issue);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Governance_Issue_${reportNumClean}.pdf"`);
+      return res.send(pdfBuffer);
+    }
+
+    if (format === 'markdown') {
+      const md = generateIssueReportMarkdown(issue);
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="Governance_Issue_${reportNumClean}.md"`);
+      return res.send(md);
+    }
+
+    // Default: JSON payload
+    res.json({ success: true, data: issue });
+  } catch (error) {
+    const statusCode = error.statusCode || (error.message.includes('Invalid') ? 400 : 500);
+    res.status(statusCode).json({ success: false, error: error.message });
+  }
+}
+
+export async function exportIssueReportPdf(req, res) {
+  req.query.format = 'pdf';
+  return exportIssueReport(req, res);
 }

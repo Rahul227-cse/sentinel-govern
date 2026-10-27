@@ -43,7 +43,7 @@ const telemetrySchema = new mongoose.Schema({
   reportArtifactPath: { type: String, default: null },
   driftStatus: { 
     type: String, 
-    enum: ['HEALTHY', 'WARNING', 'DRIFT_DETECTED'],
+    enum: ['HEALTHY', 'WARNING', 'DRIFT_DETECTED', 'INSUFFICIENT_DATA'],
     default: 'HEALTHY' 
   },
   incidentId: {
@@ -74,11 +74,14 @@ const telemetrySchema = new mongoose.Schema({
     endTime: { type: Date, default: null }
   },
   performanceTelemetry: {
-    predictionVolume: { type: Number, default: 1250 },
-    avgLatencyMs: { type: Number, default: 34 },
-    errorRate: { type: Number, default: 0.004 },
-    estimatedAccuracy: { type: Number, default: 0.89 }
+    predictionVolume: { type: Number, default: 0 },
+    avgLatencyMs: { type: Number, default: null },
+    errorRate: { type: Number, default: null },
+    estimatedAccuracy: { type: Number, default: null }
   },
+  runtimeRecords: [{
+    type: mongoose.Schema.Types.Mixed
+  }],
   recordedAt: { type: Date, default: Date.now }
 }, {
   timestamps: true

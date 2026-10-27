@@ -3,132 +3,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import ThemeToggle from '../components/ThemeToggle';
+import AnimatedCircularFrame from '../components/AnimatedCircularFrame';
 import {
-  Shield, Eye, EyeOff, AlertCircle, CheckCircle2,
-  ArrowRight, Lock, Loader2, Check
+  Shield, Eye, EyeOff, AlertCircle, ArrowRight, Loader2
 } from 'lucide-react';
-
-// ─── Governance mini-flow sidebar ────────────────────────────────────────────
-
-const MINI_STEPS = [
-  { label: 'Model Registration',   done: true },
-  { label: 'Fairness Evaluation',  done: true },
-  { label: 'Policy Gate Check',    done: true },
-  { label: 'Approval Sign-off',    done: false, active: true },
-  { label: 'Production Release',   done: false },
-  { label: 'Audit Verification',   done: false },
-];
-
-function LeftPanel() {
-  return (
-    <div
-      className="auth-left-panel"
-      style={{
-        flex: '0 0 420px',
-        backgroundColor: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border)',
-        padding: '48px 40px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        minHeight: '100vh',
-      }}
-    >
-      {/* Brand Header */}
-      <div>
-        <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', marginBottom: 44 }}>
-          <div style={{
-            width: 30,
-            height: 30,
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'var(--color-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff'
-          }}>
-            <Shield size={16} strokeWidth={2.4} />
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-text)' }}>
-            SENTINEL GOVERN
-          </span>
-        </Link>
-
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: 8 }}>
-            AI Governance & Lifecycle Platform
-          </div>
-          <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.3, letterSpacing: '-0.02em', marginBottom: 10 }}>
-            Unified governance across the entire AI lifecycle.
-          </p>
-          <p style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            Deterministic policy gating, multi-stakeholder sign-offs, live inference drift surveillance, and immutable audit logs.
-          </p>
-        </div>
-
-        {/* Lifecycle mini-visualization */}
-        <div style={{
-          backgroundColor: 'var(--color-surface-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--color-border)',
-          padding: '18px 16px'
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 14 }}>
-            Lifecycle Progression
-          </div>
-          {MINI_STEPS.map((step, i) => (
-            <div key={step.label}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  backgroundColor: step.done ? 'var(--color-success-bg)' : step.active ? 'var(--color-primary)' : 'var(--color-surface)',
-                  border: `1.5px solid ${step.done ? 'var(--color-success)' : step.active ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  {step.done ? (
-                    <Check size={11} color="var(--color-success)" strokeWidth={2.5} />
-                  ) : step.active ? (
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#fff' }} />
-                  ) : null}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: step.active ? 600 : 400, color: step.active ? 'var(--color-primary)' : step.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                  {step.label}
-                </span>
-                {step.active && (
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: 'var(--color-warning-text)',
-                    backgroundColor: 'var(--color-warning-bg)',
-                    border: '1px solid var(--color-warning-border)',
-                    padding: '1px 6px',
-                    borderRadius: 'var(--radius-xs)'
-                  }}>
-                    Gate Enforced
-                  </span>
-                )}
-              </div>
-              {i < MINI_STEPS.length - 1 && (
-                <div style={{ width: 2, height: 8, backgroundColor: step.done ? 'var(--color-success-border)' : 'var(--color-border)', marginLeft: 9 }} />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-        <Lock size={12} style={{ display: 'inline', marginRight: 5, verticalAlign: 'middle' }} />
-        Authentication verifies identity. Sentinel Govern determines authorization.
-      </div>
-    </div>
-  );
-}
+import '../styles/AuthAnimated.css';
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +17,7 @@ function isSafeRedirect(path) {
 
 function getRedirectDestination(user, redirect) {
   if (redirect && isSafeRedirect(redirect)) return redirect;
+  if (user && !user.onboardingCompleted) return '/onboarding';
   return user?.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app';
 }
 
@@ -176,7 +56,7 @@ export default function LoginPage() {
       setFormError(humanizeError(authError));
       clearError();
     }
-  }, [authError]);
+  }, [authError, clearError]);
 
   function humanizeError(msg = '') {
     if (/suspended/i.test(msg)) return 'Your account has been suspended. Contact your administrator.';
@@ -219,53 +99,45 @@ export default function LoginPage() {
   const isProcessing = submitting || authLoading;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
-      <style>{`
-        .auth-left-panel { display: flex !important; }
-        @media (max-width: 840px) { .auth-left-panel { display: none !important; } }
-      `}</style>
-
-      <LeftPanel />
-
-      {/* Right: Form panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '24px 28px' }}>
-        {/* Top bar on form side: theme toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+    <div className="auth-page-wrapper">
+      {/* Top Navigation Bar */}
+      <header className="auth-top-bar">
+        <Link to="/" className="auth-brand-logo" aria-label="Sentinel Govern Home">
+          <div className="auth-brand-icon">
+            <Shield size={17} strokeWidth={2.4} />
+          </div>
+          <span className="auth-brand-text">SENTINEL GOVERN</span>
+        </Link>
+        <div className="auth-top-actions">
           <ThemeToggle />
         </div>
+      </header>
 
-        <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', padding: '20px 0' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--color-text)', marginBottom: 6 }}>
+      {/* Main Centered Stage with 50-Segment Animated Circular Frame */}
+      <main className="auth-main-stage">
+        <AnimatedCircularFrame mode="login">
+          <h1 className="auth-title">
             Sign in to Sentinel Govern
           </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', marginBottom: 28, lineHeight: 1.5 }}>
+          <p className="auth-subtitle">
             Access your enterprise governance workspace.
           </p>
 
           {/* Error Banner */}
           {formError && (
-            <div style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-              backgroundColor: 'var(--color-danger-bg)',
-              border: '1px solid var(--color-danger-border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '12px 14px',
-              marginBottom: 20
-            }} role="alert">
+            <div className="auth-error-banner" role="alert">
               <AlertCircle size={15} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-danger-text)', marginBottom: 1 }}>Sign In Failed</div>
-                <div style={{ fontSize: 12, color: 'var(--color-danger-text)' }}>{formError}</div>
+                <div style={{ fontWeight: 600, marginBottom: 1 }}>Sign In Failed</div>
+                <div>{formError}</div>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} noValidate>
             {/* Email */}
-            <div className="form-group">
-              <label htmlFor="login-email" className="form-label">
+            <div className="auth-form-group">
+              <label htmlFor="login-email" className="auth-label">
                 Email address
               </label>
               <input
@@ -277,20 +149,21 @@ export default function LoginPage() {
                 onChange={e => { setEmail(e.target.value); setFieldErrors(p => ({ ...p, email: '' })); }}
                 placeholder="name@enterprise.com"
                 disabled={isProcessing}
-                className="form-input"
-                style={{
-                  borderColor: fieldErrors.email ? 'var(--color-danger)' : undefined
-                }}
+                className={`auth-input ${fieldErrors.email ? 'has-error' : ''}`}
               />
-              {fieldErrors.email && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.email}</div>}
+              {fieldErrors.email && (
+                <div className="auth-field-error">
+                  <AlertCircle size={11} /> {fieldErrors.email}
+                </div>
+              )}
             </div>
 
             {/* Password */}
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label htmlFor="login-password" className="form-label">
+            <div className="auth-form-group" style={{ marginBottom: 12 }}>
+              <label htmlFor="login-password" className="auth-label">
                 Password
               </label>
-              <div style={{ position: 'relative' }}>
+              <div className="auth-input-wrapper">
                 <input
                   id="login-password"
                   type={showPassword ? 'text' : 'password'}
@@ -299,49 +172,43 @@ export default function LoginPage() {
                   onChange={e => { setPassword(e.target.value); setFieldErrors(p => ({ ...p, password: '' })); }}
                   placeholder="Enter password"
                   disabled={isProcessing}
-                  className="form-input"
-                  style={{
-                    width: '100%',
-                    paddingRight: 40,
-                    borderColor: fieldErrors.password ? 'var(--color-danger)' : undefined
-                  }}
+                  className={`auth-input ${fieldErrors.password ? 'has-error' : ''}`}
+                  style={{ paddingRight: 40 }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(s => !s)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  style={{
-                    position: 'absolute',
-                    right: 10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--color-text-muted)',
-                    display: 'flex',
-                    padding: 4
-                  }}
+                  className="auth-eye-btn"
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {fieldErrors.password && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.password}</div>}
+              {fieldErrors.password && (
+                <div className="auth-field-error">
+                  <AlertCircle size={11} /> {fieldErrors.password}
+                </div>
+              )}
             </div>
 
-            {/* Remember Me + Forgot */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            {/* Remember Me + Forgot Password */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}>
                 <input
                   id="login-remember-me"
                   type="checkbox"
                   checked={rememberMe}
                   onChange={e => setRememberMe(e.target.checked)}
-                  style={{ width: 14, height: 14, accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    accentColor: 'var(--auth-accent-primary)',
+                    cursor: 'pointer'
+                  }}
                 />
-                <span style={{ fontSize: 12.5, color: 'var(--color-text-secondary)' }}>Remember session</span>
+                <span style={{ fontSize: 12.5, color: 'var(--auth-text-secondary)' }}>Remember session</span>
               </label>
-              <Link to="/forgot-password" style={{ fontSize: 12.5, color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>
+              <Link to="/forgot-password" className="auth-link" style={{ fontSize: 12.5 }}>
                 Forgot password?
               </Link>
             </div>
@@ -351,12 +218,7 @@ export default function LoginPage() {
               id="login-submit"
               type="submit"
               disabled={isProcessing}
-              className="btn btn-primary"
-              style={{
-                width: '100%',
-                padding: '10px 0',
-                fontSize: 13.5
-              }}
+              className="auth-btn-primary"
             >
               {isProcessing ? (
                 <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing in…</>
@@ -367,31 +229,34 @@ export default function LoginPage() {
           </form>
 
           {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0' }}>
-            <div style={{ flex: 1, height: 1, backgroundColor: 'var(--color-border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, letterSpacing: '0.04em' }}>OR</span>
-            <div style={{ flex: 1, height: 1, backgroundColor: 'var(--color-border)' }} />
+          <div className="auth-divider">
+            <div className="auth-divider-line" />
+            <span className="auth-divider-text">OR</span>
+            <div className="auth-divider-line" />
           </div>
 
           {/* Google OAuth Button */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
-            <GoogleSignInButton onAuthSuccess={(u) => navigate(getRedirectDestination(u, redirectTo), { replace: true })} />
+          <div className="auth-google-wrapper">
+            <GoogleSignInButton
+              text="signin_with"
+              onAuthSuccess={(u) => navigate(getRedirectDestination(u, redirectTo), { replace: true })}
+            />
           </div>
 
-          {/* Sign up link */}
-          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+          {/* Create Account link */}
+          <p className="auth-switch-text">
             Don't have an account?{' '}
-            <Link to="/signup" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+            <Link to="/signup" className="auth-link">
               Create an account
             </Link>
           </p>
-        </div>
+        </AnimatedCircularFrame>
+      </main>
 
-        {/* Footer info */}
-        <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--color-text-muted)' }}>
-          © 2026 Sentinel Govern. AI Governance & Lifecycle Platform.
-        </div>
-      </div>
+      {/* Footer */}
+      <footer className="auth-footer">
+        © 2026 Sentinel Govern. Institutional AI Governance & Lifecycle Platform.
+      </footer>
     </div>
   );
 }

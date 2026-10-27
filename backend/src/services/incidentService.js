@@ -14,7 +14,7 @@ export async function createDriftIncident({
   source = 'PSI',
   driftedColumns = [],
   recordsAnalyzed = null,
-  workloadId = 'fraud-detection'
+  workloadId = 'generic-model'
 }) {
   const actorString = typeof actor === 'object' && actor !== null
     ? (actor.name || actor.email || 'ML_LEAD')
@@ -35,7 +35,7 @@ export async function createDriftIncident({
     $or: [
       { approvalStatus: 'APPROVED' },
       { deploymentStatus: { $in: ['IN_PRODUCTION', 'RETIRED'] } },
-      { lifecycleStatus: { $in: ['APPROVED', 'DEPRECATED'] } }
+      { lifecycleStatus: { $in: ['APPROVED', 'RETIRED', 'DEPRECATED'] } }
     ]
   }).sort({ createdAt: -1 });
 
@@ -59,7 +59,9 @@ export async function createDriftIncident({
         telemetryId: telemetryId ? String(telemetryId) : null,
         lastObservedAt: new Date()
       };
-      if (driftedColumns.includes('fraud_risk_score') || driftedColumns.length >= 3) {
+      const targetOrPredField = version.apiConfig?.responseMapping?.predictionField || version.referenceDataset?.targetColumn || 'prediction';
+      const hasCoreFieldDrift = driftedColumns.includes(targetOrPredField) || driftedColumns.includes('fraud_risk_score');
+      if (hasCoreFieldDrift || driftedColumns.length >= 3) {
         existingActiveIncident.severity = 'HIGH';
       }
       const updateNote = `\n[Telemetry Re-Confirmed ${new Date().toISOString()}]: Ongoing statistical drift observed across columns: ${driftedColumns.join(', ')}.`;
@@ -117,8 +119,10 @@ export async function createDriftIncident({
     ? `Production runtime monitoring detected statistically significant distribution drift in features (${driftedColumns.join(', ')}). Statistical hypothesis testing rejected baseline distribution stability at alpha = 0.05.`
     : `Production telemetry detected Population Stability Index (PSI) = ${psi}, exceeding the governance threshold of 0.25. Substantial feature shift observed.`;
 
+  const targetOrPredField = version.apiConfig?.responseMapping?.predictionField || version.referenceDataset?.targetColumn || 'prediction';
+  const hasCoreFieldDrift = driftedColumns.includes(targetOrPredField) || driftedColumns.includes('fraud_risk_score');
   const severity = isEvidently
-    ? ((driftedColumns.includes('fraud_risk_score') || driftedColumns.length >= 3) ? 'HIGH' : 'MEDIUM')
+    ? ((hasCoreFieldDrift || driftedColumns.length >= 3) ? 'HIGH' : 'MEDIUM')
     : (psi > 0.30 ? 'HIGH' : 'MEDIUM');
 
   const metricsSnapshot = isEvidently
@@ -140,7 +144,7 @@ export async function createDriftIncident({
     modelId: model._id,
     versionId: version._id,
     type: 'DATA_DRIFT',
-    workloadId: workloadId || 'fraud-detection',
+    workloadId: workloadId || model.type?.toLowerCase() || 'generic-model',
     title,
     description,
     severity,
@@ -173,24 +177,42 @@ export async function createDriftIncident({
     }
   });
 
-  // Automatically dispatch persisted notification to ML Lead
+  // Automatically dispatch persisted notifications to ML Lead and Governance Officer
   try {
+    const { dispatchNotification } = await import('./notificationService.js');
     const affectedFeaturesStr = isEvidently && driftedColumns.length > 0
       ? driftedColumns.join(', ')
       : 'runtime feature distributions';
 
-    await Notification.create({
+    await dispatchNotification({
       recipientRole: 'ML_LEAD',
       title: `[Action Required] Drift Incident ${incident.incidentNumber} Detected`,
       message: `Model "${model.name}" (${version.version}) detected statistically significant distribution drift in ${affectedFeaturesStr}. Recommended action: ${incident.recommendedAction}.`,
       type: 'DRIFT_INCIDENT',
       severity: incident.severity === 'HIGH' ? 'CRITICAL' : 'WARNING',
+      targetUrl: '/app/incidents',
       modelId: model._id,
       versionId: version._id,
-      incidentId: incident._id
+      incidentId: incident._id,
+      idempotencyKey: `drift_incident_ml_${incident.incidentNumber}`,
+      actor: 'Automated Runtime Drift Detector'
+    });
+
+    await dispatchNotification({
+      recipientRole: 'GOVERNANCE_OFFICER',
+      title: `Drift Incident ${incident.incidentNumber} Opened`,
+      message: `Statistical distribution drift detected for "${model.name}" (${version.version}). Incident ${incident.incidentNumber} has been logged.`,
+      type: 'DRIFT_INCIDENT',
+      severity: incident.severity === 'HIGH' ? 'CRITICAL' : 'WARNING',
+      targetUrl: '/app/incidents',
+      modelId: model._id,
+      versionId: version._id,
+      incidentId: incident._id,
+      idempotencyKey: `drift_incident_gov_${incident.incidentNumber}`,
+      actor: 'Automated Runtime Drift Detector'
     });
   } catch (notifErr) {
-    console.warn('[Notification] Failed to persist notification:', notifErr.message);
+    console.warn('[Notification] Failed to persist drift notification:', notifErr.message);
   }
 
   return incident;
@@ -227,6 +249,7 @@ export async function executeRollback({
       targetVersion.deploymentStatus === 'IN_PRODUCTION' ||
       targetVersion.deploymentStatus === 'RETIRED' ||
       targetVersion.lifecycleStatus === 'APPROVED' ||
+      targetVersion.lifecycleStatus === 'RETIRED' ||
       targetVersion.lifecycleStatus === 'DEPRECATED'
     );
 
@@ -257,9 +280,9 @@ export async function executeRollback({
   });
 
 
-  // Deprecate or mark current drifting version
+  // Retire or mark current drifting version
   if (currentVersion) {
-    currentVersion.lifecycleStatus = 'DEPRECATED';
+    currentVersion.lifecycleStatus = 'RETIRED';
     currentVersion.deploymentStatus = 'ROLLED_BACK';
     currentVersion.rolledBackAt = new Date();
     await currentVersion.save();
@@ -275,6 +298,33 @@ export async function executeRollback({
   model.currentProductionVersionId = targetVersion._id;
   model.lifecycleStatus = 'IN_PRODUCTION';
   await model.save();
+
+  // Manage independent per-version monitoring streams:
+  // Pause the stream of the rolled-back version and resume the target version stream.
+  try {
+    const { Monitoring } = await import('../models/Monitoring.js');
+    if (currentVersion) {
+      await Monitoring.updateMany(
+        { modelId: model._id, versionId: currentVersion._id },
+        { $set: { monitoringStatus: 'PAUSED' } }
+      );
+    }
+    const targetMon = await Monitoring.findOne({ modelId: model._id, versionId: targetVersion._id });
+    if (targetMon) {
+      targetMon.monitoringStatus = 'ACTIVE';
+      await targetMon.save();
+    } else {
+      await Monitoring.create({
+        modelId: model._id,
+        versionId: targetVersion._id,
+        primaryOwner: actor,
+        monitoringStatus: 'ACTIVE',
+        healthStatus: 'HEALTHY'
+      });
+    }
+  } catch (monErr) {
+    console.warn('[Rollback] Could not update Monitoring records status:', monErr.message);
+  }
 
   // If tied to an incident, mark incident mitigated
   if (incidentId) {
@@ -302,6 +352,39 @@ export async function executeRollback({
       remediatedIncidentId: incidentId ? String(incidentId) : null
     }
   });
+
+  // Dispatch emergency rollback notifications
+  try {
+    const { dispatchNotification } = await import('./notificationService.js');
+    await dispatchNotification({
+      recipientRole: 'ML_LEAD',
+      title: `Emergency rollback executed: ${model.name}`,
+      message: `Model "${model.name}" rolled back from ${currentVersion ? currentVersion.version : 'None'} to baseline ${targetVersion.version} by ${actor}. Rationale: ${rationale}.`,
+      type: 'ROLLBACK_TRIGGERED',
+      severity: 'CRITICAL',
+      targetUrl: '/app/incidents',
+      modelId: model._id,
+      versionId: targetVersion._id,
+      incidentId,
+      idempotencyKey: `rollback_ml_${model._id}_${Date.now()}`,
+      actor
+    });
+    await dispatchNotification({
+      recipientRole: 'GOVERNANCE_OFFICER',
+      title: `Emergency rollback executed: ${model.name}`,
+      message: `Model "${model.name}" rolled back from ${currentVersion ? currentVersion.version : 'None'} to baseline ${targetVersion.version} by ${actor}.`,
+      type: 'ROLLBACK_TRIGGERED',
+      severity: 'CRITICAL',
+      targetUrl: '/app/incidents',
+      modelId: model._id,
+      versionId: targetVersion._id,
+      incidentId,
+      idempotencyKey: `rollback_gov_${model._id}_${Date.now()}`,
+      actor
+    });
+  } catch (notifErr) {
+    console.warn('[Notification] Rollback notification warning:', notifErr.message);
+  }
 
 
   return {

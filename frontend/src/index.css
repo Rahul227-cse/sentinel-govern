@@ -65,16 +65,19 @@
   /* Elevation Shadows (Restrained, subtle) */
   --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
   --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.05), 0 1px 2px rgba(17, 24, 39, 0.03);
-  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.05);
-  --shadow-lg: 0 8px 24px rgba(17, 24, 39, 0.06);
-  --shadow-dropdown: 0 12px 32px -4px rgba(17, 24, 39, 0.08), 0 4px 12px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 4px 12px -1px rgba(17, 24, 39, 0.06), 0 2px 4px -1px rgba(17, 24, 39, 0.03);
+  --shadow-lg: 0 10px 24px -3px rgba(17, 24, 39, 0.07), 0 4px 8px -2px rgba(17, 24, 39, 0.03);
+  --shadow-dropdown: 0 12px 30px -4px rgba(17, 24, 39, 0.09), 0 4px 10px -2px rgba(17, 24, 39, 0.04);
 
-  /* Geometry & Timing */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Geometry & Timing — Softened Enterprise Radii (12–14px cards, 14–16px modals, 8–10px inputs/buttons) */
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 9px;
+  --radius-card: 13px;
+  --radius-lg: 13px;
+  --radius-modal: 16px;
   --radius-xl: 16px;
+  --radius-2xl: 20px;
   --radius-full: 9999px;
 
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -140,21 +143,21 @@
 /* ─── 2. Design Tokens: Dark Theme (Tonal & Structured) ──────────────────── */
 [data-theme="dark"] {
   /* Surface & Canvas Hierarchy — Deep Neutral Carbon & Obsidian */
-  --color-bg: #080A0E;
-  --color-surface: #0E1218;
-  --color-surface-secondary: #131821;
-  --color-surface-elevated: #18202B;
+  --color-bg: #090C10;
+  --color-surface: #0F141C;
+  --color-surface-secondary: #161D27;
+  --color-surface-elevated: #1D2633;
 
   /* Typography Colors — High-Legibility Slate Hierarchy */
   --color-text: #F1F5F9;
   --color-text-secondary: #94A3B8;
   --color-text-muted: #64748B;
-  --color-text-inverse: #080A0E;
+  --color-text-inverse: #090C10;
 
   /* Borders & Dividers — Precision 1px Structural Micro-Borders */
-  --color-border: #1E2530;
-  --color-border-subtle: #141A23;
-  --color-border-strong: #2D3748;
+  --color-border: #1F2836;
+  --color-border-subtle: #171E2A;
+  --color-border-strong: #2D394C;
   --color-border-focus: #3B82F6;
 
   /* Primary Brand: Precision Enterprise Cobalt (Zero Lavender/Purple Drift) */
@@ -162,11 +165,11 @@
   --color-primary-hover: #2563EB;
   --color-primary-active: #1D4ED8;
   --color-secondary-accent: #60A5FA;
-  --color-accent-subtle: #0B1320;
-  --color-accent-border: #1D2D47;
+  --color-accent-subtle: #0E1A2E;
+  --color-accent-border: #1E3456;
 
   /* Overlays */
-  --color-overlay: rgba(4, 6, 9, 0.82);
+  --color-overlay: rgba(5, 8, 12, 0.82);
 
   /* Semantic Status Tokens — Surgical, High-Contrast Regulatory Signals */
   --color-success: #10B981;
@@ -189,16 +192,16 @@
   --color-info-border: #1B3564;
   --color-info-text: #93C5FD;
 
-  --neutral-badge-bg: #131821;
+  --neutral-badge-bg: #161D27;
   --neutral-badge-text: #94A3B8;
-  --neutral-badge-border: #1E2530;
+  --neutral-badge-border: #1F2836;
 
   /* Elevation Shadows (Tonal surfaces dominate; subtle deep drop) */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.60);
-  --shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.70);
-  --shadow-dropdown: 0 16px 36px -4px rgba(0, 0, 0, 0.85), 0 4px 14px rgba(0, 0, 0, 0.60);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.50);
+  --shadow-md: 0 4px 14px -1px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 10px 28px -3px rgba(0, 0, 0, 0.65);
+  --shadow-dropdown: 0 16px 36px -4px rgba(0, 0, 0, 0.75), 0 4px 14px rgba(0, 0, 0, 0.50);
 
   /* Compatibility Aliases */
   --bg-app: var(--color-bg);
@@ -307,6 +310,8 @@ code, pre, .font-mono {
   display: flex;
   min-height: 100vh;
   background-color: var(--color-bg);
+  position: relative;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -320,7 +325,8 @@ code, pre, .font-mono {
   bottom: 0;
   left: 0;
   z-index: 50;
-  transition: width var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
+  transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1), background-color var(--transition-normal), border-color var(--transition-normal);
+  overflow: hidden;
 }
 
 .sidebar.collapsed {
@@ -334,11 +340,23 @@ code, pre, .font-mono {
   flex-direction: column;
   min-width: 0;
   background-color: var(--color-bg);
-  transition: margin-left var(--transition-normal), background-color var(--transition-normal);
+  transition: margin-left 220ms cubic-bezier(0.16, 1, 0.3, 1), background-color var(--transition-normal);
 }
 
 .main-content.sidebar-collapsed {
   margin-left: 68px;
+}
+
+/* Sidebar Backdrop for Mobile */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: var(--color-overlay);
+  z-index: 45;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: fadeIn 200ms ease;
 }
 
 /* ─── 5. Top Navigation Header (Navbar) ─────────────────────────────────── */
@@ -354,6 +372,25 @@ code, pre, .font-mono {
   top: 0;
   z-index: 40;
   transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.navbar-mobile-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  transition: all var(--transition-fast);
+}
+
+.navbar-mobile-toggle:hover {
+  background-color: var(--color-surface-secondary);
+  border-color: var(--color-border-strong);
 }
 
 .navbar-left {
@@ -485,25 +522,28 @@ code, pre, .font-mono {
 }
 
 /* ─── 7. Sidebar Brand & Nav Links ──────────────────────────────────────── */
-.brand {
+.sidebar .brand {
   height: 54px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
+  flex-shrink: 0;
 }
 
-.brand-main {
+.sidebar .brand-main {
   display: flex;
   align-items: center;
   gap: 10px;
   text-decoration: none;
   color: inherit;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.brand-icon {
+.sidebar .brand-icon {
   width: 28px;
   height: 28px;
   background-color: var(--color-primary);
@@ -515,10 +555,20 @@ code, pre, .font-mono {
   flex-shrink: 0;
 }
 
-.brand-text {
+.sidebar .brand-text {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 200ms ease, max-width 220ms ease;
+  max-width: 170px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .brand-text {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .brand-text h1 {
@@ -548,6 +598,7 @@ code, pre, .font-mono {
   align-items: center;
   justify-content: center;
   transition: color var(--transition-fast), background-color var(--transition-fast);
+  flex-shrink: 0;
 }
 
 .sidebar-collapse-btn:hover {
@@ -555,16 +606,38 @@ code, pre, .font-mono {
   background-color: var(--color-surface-secondary);
 }
 
-.nav-links {
+.sidebar.collapsed .brand {
+  padding: 0 12px;
+  justify-content: center;
+  position: relative;
+}
+
+.sidebar.collapsed .brand-main {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-collapse-btn {
+  position: absolute;
+  right: 4px;
+  top: 14px;
+  display: none; /* hidden in collapsed mode so brand icon centers cleanly; navbar or hover expands */
+}
+
+.sidebar.collapsed:hover .sidebar-collapse-btn {
+  display: flex;
+}
+
+.sidebar .nav-links {
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.nav-group-title {
+.sidebar .nav-group-title {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -572,26 +645,49 @@ code, pre, .font-mono {
   padding: 12px 10px 4px;
   font-weight: 700;
   user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 180ms ease, max-height 220ms ease;
+  max-height: 32px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .nav-group-title {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
 }
 
 .nav-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   white-space: nowrap;
   position: relative;
+  outline: none;
+}
+
+.sidebar.collapsed .nav-link {
+  justify-content: center;
+  padding: 9px;
 }
 
 .nav-link:hover {
   background-color: var(--color-surface-secondary);
   color: var(--color-text);
+}
+
+.nav-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-border-focus);
 }
 
 .nav-link.active {
@@ -616,11 +712,49 @@ code, pre, .font-mono {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
 .nav-link-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 180ms ease, max-width 220ms ease;
+  max-width: 170px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .nav-link-text {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Sidebar Floating Tooltip for Collapsed State */
+.sidebar-tooltip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-dropdown);
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  animation: fadeIn 140ms ease;
+}
+
+.sidebar.collapsed .nav-link:hover .sidebar-tooltip,
+.sidebar.collapsed .nav-link:focus-visible .sidebar-tooltip {
+  display: block;
 }
 
 /* ─── 8. Bottom-Left User Account Card & Popover ─────────────────────────── */
@@ -629,6 +763,7 @@ code, pre, .font-mono {
   border-top: 1px solid var(--color-border);
   background-color: var(--color-surface);
   position: relative;
+  flex-shrink: 0;
 }
 
 .user-profile-card {
@@ -636,15 +771,21 @@ code, pre, .font-mono {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 7px 9px;
   width: 100%;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background-color: var(--color-surface-secondary);
   border: 1px solid var(--color-border);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
   transition: all var(--transition-fast);
+  outline: none;
+}
+
+.sidebar.collapsed .user-profile-card {
+  justify-content: center;
+  padding: 7px 4px;
 }
 
 .user-profile-card:hover {
@@ -652,14 +793,18 @@ code, pre, .font-mono {
   border-color: var(--color-border-strong);
 }
 
+.user-profile-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+
 .user-avatar {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background-color: var(--color-accent-subtle);
   color: var(--color-primary);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 11.5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -672,6 +817,16 @@ code, pre, .font-mono {
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+  transition: opacity 180ms ease, max-width 220ms ease;
+  max-width: 150px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .user-info {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .user-name {
@@ -691,6 +846,18 @@ code, pre, .font-mono {
   gap: 4px;
 }
 
+.user-menu-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: opacity 180ms ease;
+}
+
+.sidebar.collapsed .user-menu-chevron {
+  display: none;
+}
+
 .account-popover-menu {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -698,13 +865,14 @@ code, pre, .font-mono {
   right: 8px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-dropdown);
   padding: 8px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  animation: popoverFadeIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar.collapsed .account-popover-menu {
@@ -712,7 +880,7 @@ code, pre, .font-mono {
   bottom: 16px;
   left: 74px;
   right: auto;
-  width: 230px;
+  width: 240px;
 }
 
 .account-popover-header {
@@ -798,12 +966,56 @@ code, pre, .font-mono {
   color: var(--color-danger-text);
 }
 
+/* Keyframe Animations for Micro-Interactions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalOverlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* ─── 9. Page Containers & Typography Scale ──────────────────────────────── */
 .page-container {
   padding: 28px 36px 56px;
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* ─── Breadcrumb Navigation (Suppressed Globally) ────────────────────────── */
+.breadcrumb-trail,
+.breadcrumb-item,
+.breadcrumb-separator {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 0 !important;
+  visibility: hidden !important;
 }
 
 .page-header {
@@ -841,14 +1053,23 @@ code, pre, .font-mono {
 .card {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
   padding: 22px;
   box-shadow: var(--shadow-xs);
-  transition: border-color var(--transition-fast), background-color var(--transition-normal);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-normal);
 }
 
 .card:hover {
   border-color: var(--color-border-strong);
+}
+
+.card-interactive {
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-header {
@@ -1293,19 +1514,23 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 16px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: modalOverlayFadeIn 180ms ease;
 }
 
 .modal-content {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-modal);
   max-width: 600px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-dropdown);
+  animation: modalPopIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .modal-header {
@@ -1456,34 +1681,132 @@ tr:hover td {
 
 /* ─── 18. Responsive Rules ───────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .sidebar {
-    width: 68px;
-  }
-  .brand-text, .nav-group-title, .nav-link-text, .sidebar-collapse-btn {
-    display: none;
-  }
-  .sidebar-footer {
-    padding: 8px 6px;
-  }
-  .sidebar-footer .user-info, .sidebar-footer .user-menu-chevron {
-    display: none;
-  }
-  .sidebar-footer .user-profile-card {
-    justify-content: center;
-    padding: 6px;
-  }
-  .main-content {
-    margin-left: 68px;
-  }
-  .brand {
-    justify-content: center;
-    padding: 0;
-  }
-  .nav-link {
-    justify-content: center;
-    padding: 10px;
-  }
   .page-container {
     padding: 20px 16px;
   }
 }
+
+@media (max-width: 768px) {
+  .navbar-mobile-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    width: 260px;
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-dropdown);
+  }
+
+  .sidebar-backdrop.mobile-open {
+    display: block;
+  }
+
+  .main-content,
+  .main-content.sidebar-collapsed {
+    margin-left: 0;
+  }
+
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .navbar-workspace-context span:not(.navbar-workspace-name) {
+    display: none;
+  }
+
+  .navbar-gate-indicator {
+    display: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PRINT MEDIA STYLES — Clean Governance Technical Dossier & Report Export
+   ───────────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide application chrome, navigation, sidebars, banners, and interactive controls */
+  .sidebar,
+  .navbar,
+  aside,
+  nav,
+  header,
+  .breadcrumb-trail,
+  .header-actions,
+  .no-print,
+  button,
+  .btn,
+  select,
+  input,
+  #sentinel-connection-warning-banner {
+    display: none !important;
+  }
+
+  /* Reset main layouts and backgrounds for clean A4 printing */
+  html,
+  body,
+  #root,
+  .app-container,
+  .main-content,
+  main,
+  .page-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    font-size: 11pt !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+  }
+
+  .page-container {
+    padding: 0 10mm 10mm 10mm !important;
+  }
+
+  .page-header {
+    margin-bottom: 16px !important;
+    padding-bottom: 8px !important;
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  .page-title {
+    font-size: 18pt !important;
+    color: #0f172a !important;
+  }
+
+  .page-subtitle {
+    font-size: 9.5pt !important;
+    color: #475569 !important;
+  }
+
+  /* Card styling for crisp document look */
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    margin-bottom: 14px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Retain badge and status colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Table styling */
+  table, tr, td, th {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+

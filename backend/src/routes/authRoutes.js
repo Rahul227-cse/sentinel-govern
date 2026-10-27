@@ -1,6 +1,6 @@
 import express from 'express';
 import * as authCtrl from '../controllers/authController.js';
-import { authenticateToken, optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateToken, optionalAuth, requireActiveUser } from '../middleware/authMiddleware.js';
 import { createRateLimiter } from '../middleware/securityMiddleware.js';
 
 const router = express.Router();
@@ -50,6 +50,13 @@ router.post('/reset-password', resetRateLimiter, authCtrl.resetPassword);
 
 // Current user profile
 router.get('/me', authenticateToken, authCtrl.getCurrentUser);
+
+// Edit user profile (display name and email address)
+router.patch('/profile', authenticateToken, requireActiveUser, authCtrl.updateUserProfile);
+router.put('/profile', authenticateToken, requireActiveUser, authCtrl.updateUserProfile);
+
+// Change user password (native auth accounts)
+router.post('/change-password', authenticateToken, requireActiveUser, authCtrl.changePassword);
 
 // Complete onboarding flow (role, department, team, team lead)
 router.post('/onboarding', authenticateToken, authCtrl.completeOnboarding);

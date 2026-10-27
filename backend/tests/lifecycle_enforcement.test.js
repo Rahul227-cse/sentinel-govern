@@ -237,6 +237,6 @@ test('Rollback Enforcement: Permits rollback to a genuinely approved baseline ve
   assert.equal(String(updatedModel.currentProductionVersionId), String(approvedBaseline._id));
 
   const updatedProd = await ModelVersion.findById(prodVersion._id);
-  assert.equal(updatedProd.lifecycleStatus, 'DEPRECATED');
+  assert.equal(updatedProd.lifecycleStatus, 'RETIRED');
   assert.equal(updatedProd.deploymentStatus, 'ROLLED_BACK');
 });

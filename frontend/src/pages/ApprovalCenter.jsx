@@ -18,6 +18,36 @@ import {
   FileText
 } from 'lucide-react';
 
+export function getApprovalProgress(item) {
+  if (!item) {
+    return {
+      signedCount: 0,
+      totalCount: 3,
+      requiredRoles: ['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER'],
+      isComplete: false
+    };
+  }
+
+  const requiredRoles = (item.requiredRoles && Array.isArray(item.requiredRoles) && item.requiredRoles.length > 0)
+    ? item.requiredRoles
+    : (item.policy?.requiredApprovers && Array.isArray(item.policy.requiredApprovers) && item.policy.requiredApprovers.length > 0)
+      ? item.policy.requiredApprovers
+      : ['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER'];
+
+  const approvedRoles = (item.approvals || [])
+    .filter(a => a && a.decision === 'APPROVED' && requiredRoles.includes(a.role))
+    .map(a => a.role);
+
+  const uniqueApproved = Array.from(new Set(approvedRoles));
+
+  return {
+    signedCount: uniqueApproved.length,
+    totalCount: requiredRoles.length,
+    requiredRoles,
+    isComplete: requiredRoles.length > 0 && uniqueApproved.length >= requiredRoles.length
+  };
+}
+
 export default function ApprovalCenter() {
   const { currentRole } = useRole();
   const { user } = useAuth();
@@ -44,14 +74,25 @@ export default function ApprovalCenter() {
       setPendingItems(pending);
       setCompletedItems(completed);
 
-      const currentList = activeTab === 'pending' ? pending : completed;
       if (preserveSelectedId) {
-        const found = currentList.find(i => i.version?._id === preserveSelectedId);
-        setSelectedItem(found || currentList[0] || null);
-      } else if (currentList.length > 0) {
-        setSelectedItem(currentList[0]);
+        const currentList = activeTab === 'pending' ? pending : completed;
+        const foundInCurrent = currentList.find(i => i.version?._id === preserveSelectedId);
+        if (foundInCurrent) {
+          setSelectedItem(foundInCurrent);
+        } else {
+          // If the item just finished all sign-offs, it transitions from pending to completed queue
+          const otherList = activeTab === 'pending' ? completed : pending;
+          const foundInOther = otherList.find(i => i.version?._id === preserveSelectedId);
+          if (foundInOther) {
+            setActiveTab(activeTab === 'pending' ? 'completed' : 'pending');
+            setSelectedItem(foundInOther);
+          } else {
+            setSelectedItem(currentList[0] || null);
+          }
+        }
       } else {
-        setSelectedItem(null);
+        const list = activeTab === 'pending' ? pending : completed;
+        setSelectedItem(list.length > 0 ? list[0] : null);
       }
     } catch (err) {
       console.error(err);
@@ -105,6 +146,10 @@ export default function ApprovalCenter() {
     <div className="page-container">
       {/* Header */}
       <PageHeader
+        breadcrumbs={[
+          { label: 'Workspace', to: '/app' },
+          { label: 'Approval Center' }
+        ]}
         title="Stage-Gate Approval Center"
         subtitle="Role-governed multi-stakeholder reviews and electronic sign-offs for production promotions."
       >
@@ -257,12 +302,17 @@ export default function ApprovalCenter() {
                   {item.model?.purpose}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                  <span>Risk: {formatRiskLevel(item.model?.riskLevel)}</span>
-                  <span className="tnum font-mono" style={{ color: item.approvals?.filter(a => a.decision === 'APPROVED').length >= 4 ? 'var(--success-text)' : 'inherit' }}>
-                    {item.approvals?.filter(a => a.decision === 'APPROVED').length}/4 Roles Signed
-                  </span>
-                </div>
+                {(() => {
+                  const { signedCount, totalCount, isComplete } = getApprovalProgress(item);
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                      <span>Risk: {formatRiskLevel(item.model?.riskLevel)}</span>
+                      <span className="tnum font-mono" style={{ color: isComplete ? 'var(--success-text)' : 'inherit' }}>
+                        {signedCount}/{totalCount} Roles Signed
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -339,58 +389,68 @@ export default function ApprovalCenter() {
                 </div>
 
                 {/* Stakeholder Sign-off Matrix */}
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    MANDATORY MULTI-STAKEHOLDER SIGN-OFF GATES
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER'].map((roleKey) => {
-                      const app = selectedItem.approvals?.find(a => a.role === roleKey);
-                      const isApproved = app?.decision === 'APPROVED';
-
-                      return (
-                        <div
-                          key={roleKey}
-                          style={{
-                            padding: '10px 14px',
-                            background: 'var(--bg-subtle)',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-color)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between'
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                              {formatRoleLabel(roleKey)}
-                            </div>
-                            {app?.comment ? (
-                              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
-                                "{app.comment}" — <span style={{ color: 'var(--text-muted)' }}>{app.approverName}</span>
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pending formal sign-off</div>
-                            )}
-                          </div>
-
-                          <div>
-                            {isApproved ? (
-                              <span style={{ color: 'var(--success-text)', fontWeight: 500, fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <CheckCircle2 size={14} /> Approved
-                              </span>
-                            ) : (
-                              <span style={{ color: 'var(--warning-text)', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Clock size={14} /> Pending
-                              </span>
-                            )}
-                          </div>
+                {(() => {
+                  const { signedCount, totalCount, requiredRoles, isComplete: matrixComplete } = getApprovalProgress(selectedItem);
+                  return (
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          MANDATORY MULTI-STAKEHOLDER SIGN-OFF GATES
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <span className="tnum font-mono" style={{ fontSize: '11.5px', fontWeight: 600, color: matrixComplete ? 'var(--success-text)' : 'var(--text-muted)' }}>
+                          {signedCount}/{totalCount} Roles Signed
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {requiredRoles.map((roleKey) => {
+                          const app = selectedItem.approvals?.find(a => a.role === roleKey);
+                          const isApproved = app?.decision === 'APPROVED';
+
+                          return (
+                            <div
+                              key={roleKey}
+                              style={{
+                                padding: '10px 14px',
+                                background: 'var(--bg-subtle)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid var(--border-color)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                                  {formatRoleLabel(roleKey)}
+                                </div>
+                                {app?.comment ? (
+                                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
+                                    "{app.comment}" — <span style={{ color: 'var(--text-muted)' }}>{app.approverName}</span>
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Pending formal sign-off</div>
+                                )}
+                              </div>
+
+                              <div>
+                                {isApproved ? (
+                                  <span style={{ color: 'var(--success-text)', fontWeight: 500, fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <CheckCircle2 size={14} /> Approved
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--warning-text)', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Clock size={14} /> Pending
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Completed View: Audit Sealed Summary */}
                 {isCompleted ? (
@@ -412,7 +472,7 @@ export default function ApprovalCenter() {
                           STAGE-GATE FORMALLY SEALED
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          All 4 mandatory governance sign-offs are complete and cryptographically committed to the audit ledger.
+                          All {getApprovalProgress(selectedItem).totalCount} mandatory governance sign-offs are complete and cryptographically committed to the audit ledger.
                         </div>
                       </div>
                     </div>

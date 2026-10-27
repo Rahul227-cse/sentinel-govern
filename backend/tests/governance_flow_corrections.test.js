@@ -93,7 +93,7 @@ test.before(async () => {
   v1Version = await ModelVersion.create({
     modelId: testModel._id,
     version: 'v1.0',
-    lifecycleStatus: 'DEPRECATED',
+    lifecycleStatus: 'RETIRED',
     deploymentStatus: 'RETIRED',
     policyStatus: 'PASSED',
     approvalStatus: 'APPROVED'

@@ -66,8 +66,16 @@ router.post('/models', authenticateToken, requireActiveUser, requireVerifiedUser
 router.get('/models/:id', optionalAuth, modelCtrl.getModelById);
 router.patch('/models/:id/risk', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['GOVERNANCE_OFFICER', 'ML_LEAD']), modelCtrl.updateModelRisk);
 router.patch('/models/:id/policy', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('GOVERNANCE_OFFICER'), modelCtrl.updateModelPolicy);
+router.get('/models/:id/endpoint', authenticateToken, requireActiveUser, modelCtrl.getModelEndpointConfig);
 router.patch('/models/:id/endpoint', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.updateModelApiConfig);
+router.post('/models/:id/test-connection', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['ML_LEAD', 'PLATFORM_ADMIN', 'GOVERNANCE_OFFICER']), modelCtrl.testEndpointConnection);
+router.post('/models/:id/probe', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['ML_LEAD', 'PLATFORM_ADMIN', 'GOVERNANCE_OFFICER']), modelCtrl.probeModelHealth);
+router.post('/models/:id/predict', authenticateIngestion, modelCtrl.predictModel);
+router.get('/models/:modelId/versions', optionalAuth, modelCtrl.getModelVersions);
 router.post('/models/:modelId/versions', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.createModelVersion);
+router.patch('/models/:modelId/versions/:versionId/endpoint', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.updateModelApiConfig);
+router.post('/models/:modelId/versions/:versionId/reference-dataset', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), handleFileUpload('file'), modelCtrl.uploadReferenceDataset);
+router.get('/models/:modelId/versions/:versionId/reference-dataset', authenticateToken, requireActiveUser, requireVerifiedUser, modelCtrl.getReferenceDataset);
 router.get('/models/:modelId/versions/compare', optionalAuth, modelCtrl.compareModelVersions);
 router.post('/models/versions/:versionId/transition', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), modelCtrl.transitionLifecycle);
 
@@ -107,21 +115,26 @@ router.post('/telemetry/ingest', authenticateIngestion, telemetryCtrl.ingestRunt
 router.get('/incidents', optionalAuth, incidentCtrl.getIncidents);
 router.get('/incidents/:id', optionalAuth, incidentCtrl.getIncidentById);
 router.patch('/incidents/:id', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), incidentCtrl.updateIncidentStatus);
-router.post('/incidents/rollback', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole('ML_LEAD'), incidentCtrl.rollbackModel);
+router.post('/incidents/rollback', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['ML_LEAD', 'PLATFORM_ADMIN']), incidentCtrl.rollbackModel);
 
 // --- Notifications ---
-router.get('/notifications', optionalAuth, incidentCtrl.getNotifications);
-router.patch('/notifications/:id/read', optionalAuth, incidentCtrl.markNotificationRead);
+router.get('/notifications', authenticateToken, requireActiveUser, incidentCtrl.getNotifications);
+router.patch('/notifications/read-all', authenticateToken, requireActiveUser, incidentCtrl.markAllNotificationsRead);
+router.patch('/notifications/:id/read', authenticateToken, requireActiveUser, incidentCtrl.markNotificationRead);
 
 // --- Reports & Drift Analysis ---
 router.get('/reports', optionalAuth, reportCtrl.getReports);
+router.get('/reports/dossier/:modelId/:versionId?/pdf', optionalAuth, auditCtrl.exportComplianceDossierPdf);
 router.get('/reports/dossier/:modelId/:versionId?', optionalAuth, auditCtrl.exportComplianceDossier);
 router.get('/reports/:id', optionalAuth, reportCtrl.getReportDetails);
 router.get('/reports/:id/export', optionalAuth, reportCtrl.exportReport);
+router.get('/reports/:id/pdf', optionalAuth, reportCtrl.exportReportPdf);
 
 // --- Issue Reporting & Governance Review ---
 router.post('/issues', authenticateToken, requireActiveUser, requireVerifiedUser, requirePermission(PERMISSIONS.ISSUES_SUBMIT), issueCtrl.createIssueReport);
 router.get('/issues', authenticateToken, requireActiveUser, requirePermission(PERMISSIONS.ISSUES_VIEW), issueCtrl.getIssueReports);
+router.get('/issues/:id/export', authenticateToken, requireActiveUser, requirePermission(PERMISSIONS.ISSUES_VIEW), issueCtrl.exportIssueReport);
+router.get('/issues/:id/pdf', authenticateToken, requireActiveUser, requirePermission(PERMISSIONS.ISSUES_VIEW), issueCtrl.exportIssueReportPdf);
 router.get('/issues/:id', authenticateToken, requireActiveUser, requirePermission(PERMISSIONS.ISSUES_VIEW), issueCtrl.getIssueReportById);
 router.patch('/issues/:id', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['ML_LEAD', 'GOVERNANCE_OFFICER']), issueCtrl.updateIssueReport);
 router.post('/issues/:id/escalate', authenticateToken, requireActiveUser, requireVerifiedUser, requireRole(['ML_LEAD', 'GOVERNANCE_OFFICER']), issueCtrl.escalateIssueToIncident);
@@ -131,6 +144,7 @@ router.get('/audit', optionalAuth, auditCtrl.getAuditLedger);
 router.get('/audit/integrity', optionalAuth, auditCtrl.checkAuditIntegrity);
 router.post('/audit/simulate-tamper', authenticateToken, requireActiveUser, requireDemoAuditEnabled, requireRole('PLATFORM_ADMIN'), auditCtrl.simulateTamper);
 router.post('/audit/repair', authenticateToken, requireActiveUser, requireDemoAuditEnabled, requireRole('PLATFORM_ADMIN'), auditCtrl.repairAuditLedger);
+router.get('/audit/dossier/:modelId/:versionId?/pdf', optionalAuth, auditCtrl.exportComplianceDossierPdf);
 router.get('/audit/dossier/:modelId/:versionId?', optionalAuth, auditCtrl.exportComplianceDossier);
 
 export default router;

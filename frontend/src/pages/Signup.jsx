@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { updateUserProfile } from '../services/api';
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import ThemeToggle from '../components/ThemeToggle';
-import { formatRoleLabel } from '../utils/formatters';
+import AnimatedCircularFrame from '../components/AnimatedCircularFrame';
 import { Shield, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
+import '../styles/AuthAnimated.css';
 
 // ─── Password Strength Indicator ─────────────────────────────────────────────
 
@@ -12,18 +14,18 @@ function PasswordStrength({ password }) {
   if (!password) return null;
 
   const checks = [
-    { label: 'At least 8 characters',    ok: password.length >= 8 },
-    { label: 'Uppercase letter',          ok: /[A-Z]/.test(password) },
-    { label: 'Lowercase letter',          ok: /[a-z]/.test(password) },
-    { label: 'Number',                    ok: /[0-9]/.test(password) },
+    { label: 'At least 8 characters', ok: password.length >= 8 },
+    { label: 'Uppercase letter',       ok: /[A-Z]/.test(password) },
+    { label: 'Lowercase letter',       ok: /[a-z]/.test(password) },
+    { label: 'Number',                 ok: /[0-9]/.test(password) },
   ];
   const passed = checks.filter(c => c.ok).length;
   const colors = ['var(--color-danger)', 'var(--color-warning)', 'var(--color-warning)', 'var(--color-success)', 'var(--color-success)'];
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
 
   return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+    <div style={{ marginTop: 6, marginBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
         {[0, 1, 2, 3].map(i => (
           <div
             key={i}
@@ -31,117 +33,32 @@ function PasswordStrength({ password }) {
               flex: 1,
               height: 3,
               borderRadius: 2,
-              backgroundColor: i < passed ? colors[passed] : 'var(--color-border)',
+              backgroundColor: i < passed ? colors[passed] : 'var(--auth-border)',
               transition: 'background 200ms'
             }}
           />
         ))}
       </div>
       {passed > 0 && (
-        <div style={{ fontSize: 11, color: colors[passed], fontWeight: 600, marginBottom: 6 }}>{labels[passed]}</div>
+        <div style={{ fontSize: 11, color: colors[passed], fontWeight: 600, marginBottom: 4 }}>
+          {labels[passed]} password
+        </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 10px' }}>
         {checks.map(c => (
           <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{
               width: 5,
               height: 5,
               borderRadius: '50%',
-              backgroundColor: c.ok ? 'var(--color-success)' : 'var(--color-border-strong)',
+              backgroundColor: c.ok ? 'var(--color-success)' : 'var(--auth-border-strong)',
               flexShrink: 0
             }} />
-            <span style={{ fontSize: 11, color: c.ok ? 'var(--color-success-text)' : 'var(--color-text-muted)' }}>{c.label}</span>
+            <span style={{ fontSize: 10.5, color: c.ok ? 'var(--color-success-text)' : 'var(--auth-text-muted)' }}>
+              {c.label}
+            </span>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Left Panel ───────────────────────────────────────────────────────────────
-
-function LeftPanel() {
-  return (
-    <div
-      className="auth-left-panel"
-      style={{
-        flex: '0 0 420px',
-        backgroundColor: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border)',
-        padding: '48px 40px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        minHeight: '100vh'
-      }}
-    >
-      <div>
-        <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', marginBottom: 44 }}>
-          <div style={{
-            width: 30,
-            height: 30,
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'var(--color-primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff'
-          }}>
-            <Shield size={16} strokeWidth={2.4} />
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-text)' }}>
-            SENTINEL GOVERN
-          </span>
-        </Link>
-
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--color-primary)', textTransform: 'uppercase', marginBottom: 8 }}>
-            Workspace Registration
-          </div>
-          <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.3, letterSpacing: '-0.02em', marginBottom: 10 }}>
-            Establish governance accountability for enterprise AI.
-          </p>
-          <p style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            Configure your organizational unit, select your governance persona, and participate in multi-stakeholder model sign-offs.
-          </p>
-        </div>
-
-        {/* Governance roles */}
-        <div style={{
-          backgroundColor: 'var(--color-surface-secondary)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '18px 16px'
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12 }}>
-            Separation of Duty Roles
-          </div>
-          {[
-            { role: 'ML_LEAD',             desc: 'Model registry, evals & promotion' },
-            { role: 'GOVERNANCE_OFFICER',  desc: 'Fairness, policy review & compliance' },
-            { role: 'EXECUTIVE_APPROVER',  desc: 'Business-risk acceptance & executive sign-off' },
-            { role: 'PLATFORM_ADMIN',      desc: 'System administration & user access' },
-          ].map(({ role, desc }) => (
-            <div key={role} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
-              <span style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--color-primary)',
-                backgroundColor: 'var(--color-accent-subtle)',
-                padding: '2px 7px',
-                borderRadius: 'var(--radius-xs)',
-                border: '1px solid var(--color-accent-border)'
-              }}>
-                {formatRoleLabel(role)}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{desc}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
-        Institutional AI governance adhering to NIST AI RMF and EU AI Act Annex III standards.
       </div>
     </div>
   );
@@ -150,11 +67,15 @@ function LeftPanel() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function SignupPage() {
-  const { user, isAuthenticated, loading: authLoading, signup, error: authError, clearError } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, signup, logout, refreshUser, error: authError, clearError } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [name, setName]                       = useState('');
-  const [email, setEmail]                     = useState('');
+  // An account is already established if the user is authenticated with pending onboarding
+  const hasExistingAccount = Boolean(isAuthenticated && user && !user.onboardingCompleted);
+
+  const [name, setName]                       = useState(location.state?.name || user?.name || '');
+  const [email, setEmail]                     = useState(location.state?.email || user?.email || '');
   const [password, setPassword]               = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword]       = useState(false);
@@ -167,19 +88,29 @@ export default function SignupPage() {
 
   useEffect(() => { nameRef.current?.focus(); }, []);
 
+  // Sync state if user loads after mount
+  useEffect(() => {
+    if (user) {
+      setName(prev => (!prev ? (user.name || '') : prev));
+      setEmail(prev => (!prev ? (user.email || '') : prev));
+    }
+  }, [user]);
+
+  // If user has already completed onboarding, redirect to destination
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
-      if (!user.onboardingCompleted) {
-        navigate('/onboarding', { replace: true });
-      } else {
+      if (user.onboardingCompleted) {
         navigate(user.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app', { replace: true });
       }
     }
   }, [authLoading, isAuthenticated, user, navigate]);
 
   useEffect(() => {
-    if (authError) { setFormError(authError); clearError(); }
-  }, [authError]);
+    if (authError) {
+      setFormError(authError);
+      clearError();
+    }
+  }, [authError, clearError]);
 
   function validate() {
     const errors = {};
@@ -203,7 +134,16 @@ export default function SignupPage() {
     try {
       const res = await signup({ name: name.trim(), email: email.trim().toLowerCase(), password });
       if (res.success) {
-        navigate('/onboarding', { replace: true });
+        // Continue directly into Sentinel Govern onboarding workflow, preserving any existing onboarding selections
+        navigate('/onboarding', {
+          replace: true,
+          state: {
+            fromSignup: true,
+            name: name.trim(),
+            email: email.trim().toLowerCase(),
+            onboardingData: location.state?.onboardingData || null
+          }
+        });
       } else {
         setFormError(res.error || 'Signup failed. Please try again.');
       }
@@ -214,164 +154,344 @@ export default function SignupPage() {
     }
   }
 
+  async function handleContinueToOnboarding(e) {
+    if (e) e.preventDefault();
+    setFormError('');
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setFieldErrors({ name: 'Full name must be at least 2 characters.' });
+      return;
+    }
+    setFieldErrors({});
+
+    // If name was edited, securely update via authenticated endpoint
+    if (trimmedName !== user?.name) {
+      setSubmitting(true);
+      try {
+        const res = await updateUserProfile({ name: trimmedName });
+        if (res && res.success) {
+          if (refreshUser) await refreshUser();
+        } else {
+          setFormError(res?.error || 'Failed to update name');
+          setSubmitting(false);
+          return;
+        }
+      } catch (err) {
+        setFormError(err.message || 'Failed to update name');
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+
+    // Navigate forward to onboarding, preserving prior selections
+    navigate('/onboarding', {
+      state: {
+        fromSignup: true,
+        onboardingData: location.state?.onboardingData || null
+      }
+    });
+  }
+
+  async function handleStartOver() {
+    setSubmitting(true);
+    try {
+      if (logout) await logout();
+    } catch {
+      // ignore
+    } finally {
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setFieldErrors({});
+      setFormError('');
+      setSubmitting(false);
+    }
+  }
+
   const isProcessing = submitting || authLoading;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
-      <style>{`
-        .auth-left-panel { display: flex !important; }
-        @media (max-width: 840px) { .auth-left-panel { display: none !important; } }
-      `}</style>
-
-      <LeftPanel />
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '24px 28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+    <div className="auth-page-wrapper">
+      {/* Top Navigation Bar */}
+      <header className="auth-top-bar">
+        <Link to="/" className="auth-brand-logo" aria-label="Sentinel Govern Home">
+          <div className="auth-brand-icon">
+            <Shield size={17} strokeWidth={2.4} />
+          </div>
+          <span className="auth-brand-text">SENTINEL GOVERN</span>
+        </Link>
+        <div className="auth-top-actions">
           <ThemeToggle />
         </div>
+      </header>
 
-        <div style={{ width: '100%', maxWidth: 420, margin: '0 auto', padding: '16px 0' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--color-text)', marginBottom: 6 }}>
-            Create your account
+      {/* Main Centered Stage with 50-Segment Animated Circular Frame (mode="signup") */}
+      <main className="auth-main-stage">
+        <AnimatedCircularFrame mode="signup">
+          <h1 className="auth-title">
+            {hasExistingAccount ? 'Account established' : 'Create your account'}
           </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', marginBottom: 24 }}>
-            Join your organization's workspace and configure your role.
+          <p className="auth-subtitle">
+            {hasExistingAccount
+              ? 'Your workspace account is ready. Adjust your name if needed, or continue.'
+              : "Join your organization's workspace and configure your role."}
           </p>
 
-          {formError && (
+          {hasExistingAccount && (
             <div style={{
               display: 'flex',
-              gap: 10,
+              gap: 8,
               alignItems: 'flex-start',
-              backgroundColor: 'var(--color-danger-bg)',
-              border: '1px solid var(--color-danger-border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '12px 14px',
-              marginBottom: 18
-            }} role="alert">
-              <AlertCircle size={15} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ fontSize: 12.5, color: 'var(--color-danger-text)' }}>{formError}</div>
+              borderLeft: '2px solid var(--auth-accent-primary)',
+              padding: '4px 0 4px 10px',
+              marginBottom: 14
+            }} role="status">
+              <CheckCircle2 size={15} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 12, color: 'var(--color-text)' }}>
+                <strong style={{ display: 'block', marginBottom: 2 }}>Account registered for {user?.email || email}</strong>
+                <span style={{ color: 'var(--color-text-secondary)' }}>
+                  You are in the workspace setup flow. You can adjust your full name below or continue with onboarding.
+                </span>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate>
+          {formError && (
+            <div className="auth-error-banner" role="alert">
+              <AlertCircle size={15} color="var(--color-danger)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 1 }}>
+                  {hasExistingAccount ? 'Update Failed' : 'Account Creation Failed'}
+                </div>
+                <div>{formError}</div>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={hasExistingAccount ? handleContinueToOnboarding : handleSubmit} noValidate>
             {/* Full name */}
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label htmlFor="signup-name" className="form-label">Full name</label>
+            <div className="auth-form-group">
+              <label htmlFor="signup-name" className="auth-label">Full name</label>
               <input
-                id="signup-name" ref={nameRef} type="text" autoComplete="name"
-                value={name} onChange={e => { setName(e.target.value); setFieldErrors(p => ({ ...p, name: '' })); }}
-                placeholder="Jane Smith" disabled={isProcessing}
-                className="form-input"
-                style={{ borderColor: fieldErrors.name ? 'var(--color-danger)' : undefined }}
+                id="signup-name"
+                ref={nameRef}
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={e => { setName(e.target.value); setFieldErrors(p => ({ ...p, name: '' })); }}
+                placeholder="Jane Smith"
+                disabled={isProcessing}
+                className={`auth-input ${fieldErrors.name ? 'has-error' : ''}`}
               />
-              {fieldErrors.name && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.name}</div>}
-            </div>
-
-            {/* Email */}
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label htmlFor="signup-email" className="form-label">Work email</label>
-              <input
-                id="signup-email" type="email" autoComplete="email"
-                value={email} onChange={e => { setEmail(e.target.value); setFieldErrors(p => ({ ...p, email: '' })); }}
-                placeholder="name@enterprise.com" disabled={isProcessing}
-                className="form-input"
-                style={{ borderColor: fieldErrors.email ? 'var(--color-danger)' : undefined }}
-              />
-              {fieldErrors.email && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.email}</div>}
-            </div>
-
-            {/* Password */}
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label htmlFor="signup-password" className="form-label">Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="signup-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password"
-                  value={password} onChange={e => { setPassword(e.target.value); setFieldErrors(p => ({ ...p, password: '' })); }}
-                  placeholder="Create password (8+ chars)" disabled={isProcessing}
-                  className="form-input"
-                  style={{ width: '100%', paddingRight: 40, borderColor: fieldErrors.password ? 'var(--color-danger)' : undefined }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(s => !s)}
-                  aria-label={showPassword ? 'Hide' : 'Show'}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', padding: 4 }}
-                >
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </div>
-              {fieldErrors.password && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.password}</div>}
-              <PasswordStrength password={password} />
-            </div>
-
-            {/* Confirm password */}
-            <div className="form-group" style={{ marginBottom: 18 }}>
-              <label htmlFor="signup-confirm" className="form-label">Confirm password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="signup-confirm" type={showConfirm ? 'text' : 'password'} autoComplete="new-password"
-                  value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setFieldErrors(p => ({ ...p, confirmPassword: '' })); }}
-                  placeholder="Confirm password" disabled={isProcessing}
-                  className="form-input"
-                  style={{ width: '100%', paddingRight: 40, borderColor: fieldErrors.confirmPassword ? 'var(--color-danger)' : undefined }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(s => !s)}
-                  aria-label={showConfirm ? 'Hide' : 'Show'}
-                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', padding: 4 }}
-                >
-                  {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </div>
-              {fieldErrors.confirmPassword && <div style={{ fontSize: 11.5, color: 'var(--color-danger)', marginTop: 2 }}>{fieldErrors.confirmPassword}</div>}
-              {confirmPassword && confirmPassword === password && !fieldErrors.confirmPassword && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-                  <CheckCircle2 size={12} color="var(--color-success)" />
-                  <span style={{ fontSize: 11.5, color: 'var(--color-success-text)' }}>Passwords match</span>
+              {fieldErrors.name && (
+                <div className="auth-field-error">
+                  <AlertCircle size={11} /> {fieldErrors.name}
                 </div>
               )}
             </div>
 
-            <button
-              id="signup-submit"
-              type="submit"
-              disabled={isProcessing}
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '10px 0', fontSize: 13.5 }}
-            >
-              {isProcessing ? (
-                <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Creating account…</>
-              ) : (
-                <>Create account <ArrowRight size={14} /></>
+            {/* Email */}
+            <div className="auth-form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label htmlFor="signup-email" className="auth-label">Work email</label>
+                {hasExistingAccount && (
+                  <span style={{ fontSize: 11, color: 'var(--auth-text-muted)' }}>Registered</span>
+                )}
+              </div>
+              <input
+                id="signup-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={hasExistingAccount ? undefined : e => { setEmail(e.target.value); setFieldErrors(p => ({ ...p, email: '' })); }}
+                placeholder="name@enterprise.com"
+                disabled={isProcessing || hasExistingAccount}
+                readOnly={hasExistingAccount}
+                className={`auth-input ${fieldErrors.email ? 'has-error' : ''}`}
+                style={hasExistingAccount ? { backgroundColor: 'var(--auth-surface-secondary)', opacity: 0.9, cursor: 'not-allowed' } : undefined}
+              />
+              {fieldErrors.email && (
+                <div className="auth-field-error">
+                  <AlertCircle size={11} /> {fieldErrors.email}
+                </div>
               )}
-            </button>
+            </div>
+
+            {/* Password section */}
+            {hasExistingAccount ? (
+              <div style={{
+                padding: '6px 0',
+                marginBottom: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Shield size={14} color="var(--color-success)" />
+                  <span style={{ fontSize: 12, color: 'var(--auth-text-secondary)', fontWeight: 500 }}>
+                    Password established and encrypted
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--color-success)', fontWeight: 600 }}>Secured</span>
+              </div>
+            ) : (
+              <>
+                {/* Password */}
+                <div className="auth-form-group">
+                  <label htmlFor="signup-password" className="auth-label">Password</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      id="signup-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); setFieldErrors(p => ({ ...p, password: '' })); }}
+                      placeholder="Create password (8+ chars)"
+                      disabled={isProcessing}
+                      className={`auth-input ${fieldErrors.password ? 'has-error' : ''}`}
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(s => !s)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="auth-eye-btn"
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  {fieldErrors.password && (
+                    <div className="auth-field-error">
+                      <AlertCircle size={11} /> {fieldErrors.password}
+                    </div>
+                  )}
+                  <PasswordStrength password={password} />
+                </div>
+
+                {/* Confirm password */}
+                <div className="auth-form-group" style={{ marginBottom: 16 }}>
+                  <label htmlFor="signup-confirm" className="auth-label">Confirm password</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      id="signup-confirm"
+                      type={showConfirm ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={e => { setConfirmPassword(e.target.value); setFieldErrors(p => ({ ...p, confirmPassword: '' })); }}
+                      placeholder="Confirm password"
+                      disabled={isProcessing}
+                      className={`auth-input ${fieldErrors.confirmPassword ? 'has-error' : ''}`}
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(s => !s)}
+                      aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                      className="auth-eye-btn"
+                    >
+                      {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  {fieldErrors.confirmPassword && (
+                    <div className="auth-field-error">
+                      <AlertCircle size={11} /> {fieldErrors.confirmPassword}
+                    </div>
+                  )}
+                  {confirmPassword && confirmPassword === password && !fieldErrors.confirmPassword && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+                      <CheckCircle2 size={12} color="var(--color-success)" />
+                      <span style={{ fontSize: 11, color: 'var(--color-success-text)' }}>Passwords match</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Action Button */}
+            {hasExistingAccount ? (
+              <button
+                id="signup-continue-onboarding"
+                type="submit"
+                disabled={isProcessing}
+                className="auth-btn-primary"
+              >
+                {isProcessing ? (
+                  <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Updating profile…</>
+                ) : (
+                  <>Continue to Onboarding <ArrowRight size={14} /></>
+                )}
+              </button>
+            ) : (
+              <button
+                id="signup-submit"
+                type="submit"
+                disabled={isProcessing}
+                className="auth-btn-primary"
+              >
+                {isProcessing ? (
+                  <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Creating account…</>
+                ) : (
+                  <>Create account <ArrowRight size={14} /></>
+                )}
+              </button>
+            )}
           </form>
 
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-            <div style={{ flex: 1, height: 1, backgroundColor: 'var(--color-border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, letterSpacing: '0.04em' }}>OR</span>
-            <div style={{ flex: 1, height: 1, backgroundColor: 'var(--color-border)' }} />
-          </div>
+          {/* Additional Options */}
+          {hasExistingAccount ? (
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <button
+                id="signup-start-over-btn"
+                type="button"
+                onClick={handleStartOver}
+                disabled={isProcessing}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--auth-text-muted)',
+                  fontSize: 12.5,
+                  cursor: 'pointer',
+                  textDecoration: 'underline'
+                }}
+              >
+                Register a different account / Sign out
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Divider */}
+              <div className="auth-divider">
+                <div className="auth-divider-line" />
+                <span className="auth-divider-text">OR</span>
+                <div className="auth-divider-line" />
+              </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-            <GoogleSignInButton onAuthSuccess={(u) => navigate(u?.onboardingCompleted ? (u?.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app') : '/onboarding', { replace: true })} />
-          </div>
+              {/* Google Sign-Up Button */}
+              <div className="auth-google-wrapper">
+                <GoogleSignInButton
+                  text="signup_with"
+                  onAuthSuccess={(u) => navigate(u?.onboardingCompleted ? (u?.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app') : '/onboarding', { replace: true })}
+                />
+              </div>
 
-          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            Already registered?{' '}
-            <Link to="/login" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign in
-            </Link>
-          </p>
-        </div>
+              {/* Link to Login */}
+              <p className="auth-switch-text">
+                Already registered?{' '}
+                <Link to="/login" className="auth-link">
+                  Sign in
+                </Link>
+              </p>
+            </>
+          )}
+        </AnimatedCircularFrame>
+      </main>
 
-        <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--color-text-muted)' }}>
-          © 2026 Sentinel Govern. AI Governance & Lifecycle Platform.
-        </div>
-      </div>
+      {/* Footer */}
+      <footer className="auth-footer">
+        © 2026 Sentinel Govern. Institutional AI Governance & Lifecycle Platform.
+      </footer>
     </div>
   );
 }

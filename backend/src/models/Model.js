@@ -33,7 +33,7 @@ const modelSchema = new mongoose.Schema({
   },
   lifecycleStatus: { 
     type: String, 
-    enum: ['DRAFT', 'UNDER_REVIEW', 'EVALUATION', 'PENDING_APPROVAL', 'APPROVED', 'IN_PRODUCTION', 'DEPRECATED'],
+    enum: ['DRAFT', 'UNDER_REVIEW', 'EVALUATION', 'PENDING_APPROVAL', 'APPROVED', 'IN_PRODUCTION', 'RETIRED', 'DEPRECATED'],
     default: 'DRAFT' 
   },
   currentProductionVersionId: { 
@@ -64,13 +64,28 @@ const modelSchema = new mongoose.Schema({
     default: null
   },
   apiConfig: {
-    endpointUrl: { type: String, default: 'http://127.0.0.1:8000' },
-    healthEndpoint: { type: String, default: '/health' },
-    predictEndpoint: { type: String, default: '/score' },
-    authHeader: { type: String, default: '' },
-    status: { type: String, enum: ['DISCONNECTED', 'CONNECTED', 'UNAVAILABLE', 'CONFIGURATION_REQUIRED'], default: 'DISCONNECTED' },
+    endpointUrl: { type: String, default: '' },
+    healthEndpoint: { type: String, default: '' },
+    predictEndpoint: { type: String, default: '' },
+    method: { type: String, enum: ['POST', 'GET'], default: 'POST' },
+    authType: { type: String, enum: ['NONE', 'BEARER', 'API_KEY', 'CUSTOM_HEADER'], default: 'NONE' },
+    authHeaderName: { type: String, default: '' },
+    authHeaderValue: { type: String, default: '', select: false },
+    requestMapping: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    responseMapping: {
+      predictionField: { type: String, default: '' },
+      latencyField: { type: String, default: '' }
+    },
+    timeoutMs: { type: Number, default: 30000 },
+    maxRetries: { type: Number, default: 2 },
+    status: { 
+      type: String, 
+      enum: ['CONFIGURATION_REQUIRED', 'DISCONNECTED', 'CONNECTED', 'UNAVAILABLE'], 
+      default: 'CONFIGURATION_REQUIRED' 
+    },
     lastCheckedAt: { type: Date, default: null },
-    lastResponseTimeMs: { type: Number, default: null }
+    lastResponseTimeMs: { type: Number, default: null },
+    lastError: { type: String, default: null }
   },
   riskAssessment: { type: riskAssessmentSchema, default: () => ({}) }
 }, {

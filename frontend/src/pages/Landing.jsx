@@ -1,1264 +1,1282 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ThemeToggle from '../components/ThemeToggle';
-import {
-  Shield,
-  CheckCircle2,
-  ArrowRight,
-  Menu,
-  X
-} from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { Sun, Moon } from 'lucide-react';
+import './Landing.css';
 
-// ─── Lifecycle Simulation Data ───────────────────────────────────────────────
+// ─── 1. Governance Lifecycle Acts Data ───────────────────────────────────────
 
-const GOVERNANCE_STAGES = [
+const ACTS_DATA = [
   {
-    id: 'registration',
-    step: '01',
-    label: 'Model Registration',
-    role: 'ML Lead',
-    summary: 'Asset registered with ownership and risk classification',
-    metric: 'High Risk (Tier 2)',
-    status: 'COMPLETED',
-    evidence: {
-      modelName: 'Enterprise Credit Scoring v2.4.0',
-      framework: 'PyTorch / XGBoost Ensemble',
-      riskTier: 'HIGH',
-      intendedUse: 'Consumer lending creditworthiness assessment',
-      owner: 'ml-lead@sentinel.govern'
-    }
+    idx: '01',
+    kicker: 'Act I — Registration',
+    title: 'The defendant is entered.',
+    body: 'Every AI asset is entered into the institutional registry with declared business ownership, training data lineage, and EU AI Act classification. Unregistered models cannot enter production pipelines.',
+    tags: ['EU AI Act §5(b)', 'Annex III High-Risk', 'Lineage Hashed', 'PyTorch 2.4'],
+    screenPath: 'console / registry / credit-risk-v2.1',
+    screenStatus: '● RECORDING'
   },
   {
-    id: 'evaluation',
-    step: '02',
-    label: 'Fairness & Evaluation',
-    role: 'Governance Officer',
-    summary: 'Disparate impact & performance benchmark verification',
-    metric: 'DI Ratio 0.88 (>= 0.80)',
-    status: 'COMPLETED',
-    evidence: {
-      accuracy: '94.2%',
-      disparateImpactRatio: '0.884',
-      demographicParityDiff: '0.041',
-      protectedAttributes: ['Gender', 'Age Group', 'Ethnicity'],
-      evalDataset: 'holdout_eval_2026_q1.csv (120k records)'
-    }
+    idx: '02',
+    kicker: 'Act II — Fairness Studio',
+    title: 'Statistical proof, not intentions.',
+    body: 'Automated statistical evaluation against legally protected attributes. Calculates Disparate Impact Ratio, Demographic Parity Delta, and Equalized Odds against the four-fifths rule.',
+    tags: ['80% Legal Threshold', 'Demographic Parity', 'Equalized Odds', '184k Samples'],
+    screenPath: 'console / fairness / holdout_eval_2026',
+    screenStatus: '● EVALUATED'
   },
   {
-    id: 'policy_gate',
-    step: '03',
-    label: 'Policy Gate Check',
-    role: 'Governance Officer',
-    summary: 'Automated evaluation against EU AI Act & NIST RMF gates',
-    metric: '3/3 Policies Met',
-    status: 'COMPLETED',
-    evidence: {
-      policySet: 'EU AI Act Annex III + NIST AI RMF',
-      minAccuracyRule: 'PASSED (94.2% >= 90.0%)',
-      fairnessGateRule: 'PASSED (0.884 >= 0.800)',
-      dataProvenanceRule: 'VERIFIED & CATALOGED'
-    }
+    idx: '03',
+    kicker: 'Act III — Policy Gate Check',
+    title: 'The law is executed.',
+    body: 'Configurable governance policies bind statutory thresholds directly to the deployment gate. If fairness or minimum accuracy fail, promotion is blocked deterministically on the backend.',
+    tags: ['Gate 03 Pre-Deploy', 'Blocking Invariant', 'NIST AI RMF 1.0', 'Deterministic'],
+    screenPath: 'console / policy-engine / gate-evaluation',
+    screenStatus: '● VERIFIED'
   },
   {
-    id: 'approvals',
-    step: '04',
-    label: 'Stakeholder Approvals',
-    role: 'Multi-party Sign-off',
-    summary: 'Cryptographically sealed multi-stakeholder consent',
-    metric: '4/4 Signatures Verified',
-    status: 'COMPLETED',
-    evidence: {
-      mlLeadSign: 'SIGNED (ml-lead@sentinel.govern)',
-      governanceOfficerSign: 'SIGNED (governance@sentinel.govern)',
-      executiveSign: 'SIGNED (vp-risk@sentinel.govern)'
-    }
+    idx: '04',
+    kicker: 'Act IV — Stakeholder Quorum',
+    title: 'Three keys to launch.',
+    body: 'Eliminates single-point deployment risk. Promotion to production strictly requires cryptographically sealed sign-offs across ML Lead, Governance Officer, and Executive Approver domains.',
+    tags: ['3-Domain Quorum', 'Role Separation', 'Cryptographic Signature', 'Executive Consent'],
+    screenPath: 'console / approval-center / q-quorum',
+    screenStatus: '● 3/3 SIGNED'
   },
   {
-    id: 'production',
-    step: '05',
-    label: 'Production Serving',
-    role: 'Platform Ops',
-    summary: 'Authorized deployment with runtime drift monitoring',
-    metric: 'Active (v2.4.0)',
-    status: 'ACTIVE',
-    evidence: {
-      trafficAllocation: '100% In-Fleet Inference',
-      latencyP99: '28ms',
-      baselineReference: 'reference_baseline_v2.4.json',
-      driftAlertsConfigured: 'PSI threshold > 0.10'
-    }
+    idx: '05',
+    kicker: 'Act V — Runtime Telemetry',
+    title: 'Surveillance without sleep.',
+    body: 'Evidently AI statistical telemetry monitors real-time feature drift and Population Stability Index (PSI). Cross the threshold and production atomically rolls back to the last verified baseline.',
+    tags: ['Evidently AI 0.7.23', 'PSI Invariant', 'Distribution Drift', 'Atomic Rollback'],
+    screenPath: 'console / monitoring / live-telemetry',
+    screenStatus: '● LIVE STREAM'
   },
   {
-    id: 'monitoring',
-    step: '06',
-    label: 'Runtime Telemetry & Audit',
-    role: 'Continuous Surveillance',
-    summary: 'Live PSI calculation and immutable SHA-256 audit ledger',
-    metric: 'PSI 0.042 (Stable)',
-    status: 'MONITORING',
-    evidence: {
-      currentPsi: '0.042 (Stable)',
-      incidentsActive: '0 Active Incidents',
-      lastLedgerBlock: '#1,489 (SHA-256 Sealed)',
-      ledgerStatus: 'Tamper-Evident Integrity Verified'
-    }
+    idx: '06',
+    kicker: 'Act VI — Cryptographic Audit',
+    title: 'Sealed in cryptography.',
+    body: 'Every model lifecycle mutation, policy verdict, and sign-off is hashed into an append-only SHA-256 chain. Tampering with any byte invalidates every subsequent block in the ledger.',
+    tags: ['SHA-256 Linked', 'Tamper-Evident', 'Zero Breaks', 'Court-Admissible Evidence'],
+    screenPath: 'console / audit-trail / sha256-ledger',
+    screenStatus: '● SEALED'
   }
 ];
 
-// ─── Real Sentinel Govern Product Modules for Mockup Showcase ─────────────────────────
-
-const PRODUCT_MODULES = [
+// Initial Audit Chain Blocks
+const INITIAL_CHAIN_BLOCKS = [
   {
-    id: 'registry',
-    title: 'Model Registry & Inventory',
-    tag: 'Asset Governance',
-    subtitle: 'Institutional catalog of all ML models, risk tiers, and lifecycle states.',
-    description: 'Every AI system is cataloged with strict metadata: business initiative ownership, operational domain, framework versions, and regulatory risk tier (Minimal, Limited, High, Unacceptable). Unregistered models cannot enter production pipelines.',
-    uiSnippet: {
-      title: 'Credit Decisioning Engine v2.4.0',
-      badge: 'High Risk',
-      badgeVariant: 'warning',
-      state: 'In Production',
-      metrics: [
-        { label: 'Risk Classification', value: 'High (EU AI Act)' },
-        { label: 'Primary Owner', value: 'Quantitative Risk Squad' },
-        { label: 'Active Deployment', value: 'v2.4.0 (Deployed Mar 2026)' },
-        { label: 'Governance Dossier', value: 'Dossier #SNT-8821' }
-      ]
-    }
+    id: 1481,
+    action: 'MODEL_REGISTERED',
+    actor: 'alex.chen@sentinel.govern',
+    hash: '8f2a9c1e4d3b5a7098e6f12345bcdefa7890123456789abcdef0123456789abc',
+    parentHash: '0000000000000000000000000000000000000000000000000000000000000000',
+    data: 'Model: CreditRisk Underwriting v2.1 | Risk: HIGH_RISK'
   },
   {
-    id: 'fairness',
-    title: 'Fairness Studio & Benchmarks',
-    tag: 'Algorithmic Verification',
-    subtitle: 'Objective measurement of demographic disparity and benchmark conformity.',
-    description: 'Empower AI Governance Officers to audit models for demographic bias before promotion. Ingest benchmark evaluation results via CSV or live test suites to verify Disparate Impact Ratios and Demographic Parity across sensitive groups.',
-    uiSnippet: {
-      title: 'Fairness Benchmark Suite — Subgroup Audit',
-      badge: 'Benchmark Passed',
-      badgeVariant: 'success',
-      state: 'Evaluated',
-      metrics: [
-        { label: 'Disparate Impact Ratio', value: '0.884 (Threshold >= 0.80)' },
-        { label: 'Demographic Parity Delta', value: '0.041 (Threshold <= 0.10)' },
-        { label: 'Protected Attributes Audited', value: 'Age, Gender, Geography' },
-        { label: 'Benchmark Status', value: 'Conformity Validated' }
-      ]
-    }
+    id: 1482,
+    action: 'FAIRNESS_BENCHMARKED',
+    actor: 'elena.rostova@sentinel.govern',
+    hash: '3c7e8b9a1f203d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e',
+    parentHash: '8f2a9c1e4d3b5a7098e6f12345bcdefa7890123456789abcdef0123456789abc',
+    data: 'Disparate Impact: 0.884 | Demographic Parity: 0.031'
   },
   {
-    id: 'policies',
-    title: 'Deterministic Policy Gates',
-    tag: 'Pre-Deployment Gating',
-    subtitle: 'Automated policy enforcement that blocks non-compliant lifecycle transitions.',
-    description: 'Configure institutional policies adhering to NIST AI RMF and EU AI Act requirements. If a model fails fairness thresholds or minimum accuracy criteria, Sentinel Govern policy gates deterministically halt deployment.',
-    uiSnippet: {
-      title: 'Institutional Lending Governance Policy v3.1',
-      badge: 'Enforcing',
-      badgeVariant: 'info',
-      state: 'Active Policy',
-      metrics: [
-        { label: 'Minimum F1-Score Rule', value: '0.920 Required (Actual: 0.942)' },
-        { label: 'Disparate Impact Rule', value: 'Min 0.800 (Actual: 0.884)' },
-        { label: 'Mandatory Reviewers', value: 'ML Lead, Ethics, Compliance' },
-        { label: 'Bypass Override', value: 'Strictly Prohibited' }
-      ]
-    }
+    id: 1483,
+    action: 'POLICY_GATES_PASSED',
+    actor: 'policy.daemon@sentinel.govern',
+    hash: '6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b',
+    parentHash: '3c7e8b9a1f203d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e',
+    data: 'PolicySet: EU_AI_ACT_ANNEX_III | Verdict: PASSED'
   },
   {
-    id: 'approvals',
-    title: 'Multi-Party Approval Center',
-    tag: 'Separation of Duties',
-    subtitle: 'Independent sign-offs across engineering, governance, and executive leadership.',
-    description: 'Eliminate single-party deployment risks. Production release requires independent authorization from ML Leads, Governance Officers, and Executive Approvers. No stakeholder can approve on behalf of another.',
-    uiSnippet: {
-      title: 'Promotion Request: Model v2.4.0 -> Production',
-      badge: '3/3 Approved',
-      badgeVariant: 'success',
-      state: 'Authorized for Release',
-      metrics: [
-        { label: 'ML Engineering Sign-off', value: 'ml-lead@sentinel.govern' },
-        { label: 'Governance Officer Sign-off', value: 'governance@sentinel.govern' },
-        { label: 'Executive Approver Consent', value: 'vp-risk@sentinel.govern' }
-      ]
-    }
-  },
-  {
-    id: 'monitoring',
-    title: 'Runtime Telemetry & Observability',
-    tag: 'Inference Surveillance',
-    subtitle: 'Continuous statistical drift tracking via Evidently 0.7.23 and automatic incident triggers.',
-    description: 'Monitor production feature distributions in real time. When statistical drift is detected by Evidently 0.7.23, Sentinel Govern automatically records a governance incident and routes recommended remediations to designated stakeholders.',
-    uiSnippet: {
-      title: 'Evidently Statistical Drift Monitor — Fleet Stream',
-      badge: 'Statistical Tolerance Met',
-      badgeVariant: 'success',
-      state: 'Continuous Feed',
-      metrics: [
-        { label: 'Drift Hypothesis Test', value: 'Passed (α = 0.05)' },
-        { label: 'Avg Latency', value: '28.4ms' },
-        { label: 'Monitored Inferences', value: '4.2M inferences / 24h' },
-        { label: 'Statistical Engine', value: 'Evidently 0.7.23' }
-      ]
-    }
-  },
-  {
-    id: 'audit',
-    title: 'Cryptographic SHA-256 Audit Trail',
-    tag: 'Tamper-Evident Records',
-    subtitle: 'Append-only hash-chained ledger verifying every governance event.',
-    description: 'Every model registration, evaluation metric, policy evaluation, and stakeholder sign-off is hashed and chained into an append-only ledger. Tampering breaks the cryptographic sequence and is immediately flagged.',
-    uiSnippet: {
-      title: 'Cryptographic Audit Block #1489',
-      badge: 'Chain Intact',
-      badgeVariant: 'info',
-      state: 'Cryptographically Sealed',
-      metrics: [
-        { label: 'Block Hash', value: '7f9a...3c21 (SHA-256)' },
-        { label: 'Parent Block Hash', value: '88de...0b44 (SHA-256)' },
-        { label: 'Actor & Signature', value: 'vp-risk@sentinel.govern' },
-        { label: 'Ledger Verification', value: 'Verified 1,489/1,489 Blocks' }
-      ]
-    }
+    id: 1484,
+    action: 'QUORUM_CONSENT_SEALED',
+    actor: 'marcus.vance@sentinel.govern',
+    hash: '9f2cb4e6a71e8d90f123456789abcdef0123456789abcdef0123456789abcdef',
+    parentHash: '6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b',
+    data: '3/3 Quorum: ML Lead, Governance Officer, Executive'
   }
 ];
-
-// ─── Main Landing Page Component ─────────────────────────────────────────────
 
 export default function Landing() {
   const { isAuthenticated, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const [selectedStage, setSelectedStage] = useState(GOVERNANCE_STAGES[0]);
-  const [activeModuleTab, setActiveModuleTab] = useState(0);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const heroRef = useRef(null);
 
-  // Redirect authenticated active users straight to their workspace
+  // Navigation redirect if already logged in
   useEffect(() => {
     if (isAuthenticated && user && user.status === 'ACTIVE') {
       navigate(user.role === 'PLATFORM_ADMIN' ? '/admin/users' : '/app', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
-  // Subtle mouse move parallax effect for hero visual
-  const handleMouseMove = (e) => {
-    if (!heroRef.current) return;
-    const rect = heroRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 8; // Max 4px tilt
-    const y = ((e.clientY - rect.top) / rect.height - 0.5) * 8;
-    setMousePos({ x, y });
-  };
+  // Active Lifecycle Act
+  const [activeAct, setActiveAct] = useState(0);
 
-  const handleMouseLeave = () => {
-    setMousePos({ x: 0, y: 0 });
-  };
+  // Timecode State for HUD
+  const [timecode, setTimecode] = useState('00:00:00:00');
+
+  // Audit Chain Tamper State
+  const [chainBlocks, setChainBlocks] = useState(INITIAL_CHAIN_BLOCKS);
+  const [tamperedIndex, setTamperedIndex] = useState(null);
+
+  // Drift Simulation State
+  const [driftPsi, setDriftPsi] = useState(0.041);
+  const [isDrifting, setIsDrifting] = useState(false);
+  const [activeVersion, setActiveVersion] = useState('v2.1');
+  const [driftLogs, setDriftLogs] = useState([
+    '› monitoring 41 features',
+    '› feature: income_annual (PSI 0.041)',
+    '› drift threshold: 0.200 (Healthy)'
+  ]);
+
+  // Mobile menu open state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Refs for animations
+  const canvasRef = useRef(null);
+  const driftCanvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const driftAnimationRef = useRef(null);
+  const mouseRef = useRef({ x: -1000, y: -1000, targetX: -1000, targetY: -1000 });
+
+  // ─── 2. Running Timecode Ticker ───────────────────────────────────────────
+  useEffect(() => {
+    let frame = 0;
+    const interval = setInterval(() => {
+      frame = (frame + 1) % 60;
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      const f = String(frame).padStart(2, '0');
+      setTimecode(`${h}:${m}:${s}:${f}`);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ─── 3. Moving Strings & Flowing Text Canvas (#field) ──────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let width = (canvas.width = canvas.offsetWidth * window.devicePixelRatio);
+    let height = (canvas.height = canvas.offsetHeight * window.devicePixelRatio);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      height = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+    };
+    window.addEventListener('resize', handleResize);
+
+    const handlePointerMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseRef.current.targetX = (e.clientX - rect.left) * window.devicePixelRatio;
+      mouseRef.current.targetY = (e.clientY - rect.top) * window.devicePixelRatio;
+    };
+    const handlePointerLeave = () => {
+      mouseRef.current.targetX = -1000;
+      mouseRef.current.targetY = -1000;
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseleave', handlePointerLeave);
+
+    // Harmonic wave string parameters
+    const lineCount = 14;
+    const stringLabels = [
+      'SHA-256',
+      'DIR ≥ 0.80',
+      'PSI < 0.10',
+      'ANNEX III',
+      'EQUALIZED ODDS',
+      '3-DOMAIN QUORUM',
+      'ATOMIC ROLLBACK',
+      'NIST AI RMF',
+      'TAMPER-PROOF',
+      'DISPARATE IMPACT',
+      'NO SINGLE YES',
+      'EVIDENCE VERIFIED'
+    ];
+
+    let t = 0;
+
+    const render = () => {
+      t += 0.012;
+      ctx.clearRect(0, 0, width, height);
+
+      // Smooth mouse follow
+      mouseRef.current.x += (mouseRef.current.targetX - mouseRef.current.x) * 0.08;
+      mouseRef.current.y += (mouseRef.current.targetY - mouseRef.current.y) * 0.08;
+
+      const isDarkTheme = theme === 'dark';
+
+      // Wave Ribbons
+      for (let i = 0; i < lineCount; i++) {
+        ctx.beginPath();
+        const norm = i / (lineCount - 1);
+        const baseY = height * 0.22 + norm * height * 0.58;
+        const amplitude = 32 + Math.sin(t * 0.6 + i) * 16;
+        const freq = 0.0018 + (i % 3) * 0.0006;
+        const phase = t * 1.4 + i * 0.45;
+
+        // Theme-tuned stroke styling
+        const alpha = isDarkTheme ? 0.15 + (i % 4) * 0.07 : 0.12 + (i % 4) * 0.05;
+        const strokeColor =
+          i % 3 === 0
+            ? isDarkTheme
+              ? `rgba(49, 94, 251, ${alpha * 1.5})`
+              : `rgba(37, 99, 235, ${alpha * 1.4})`
+            : isDarkTheme
+            ? `rgba(236, 232, 224, ${alpha})`
+            : `rgba(30, 30, 32, ${alpha})`;
+
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = i % 2 === 0 ? 1.5 * window.devicePixelRatio : 1 * window.devicePixelRatio;
+
+        const step = 20 * window.devicePixelRatio;
+        let prevX = 0;
+        let prevY = baseY;
+
+        for (let x = 0; x <= width + step; x += step) {
+          // Undulating sine harmonic
+          let y = baseY + Math.sin(x * freq + phase) * amplitude + Math.cos(x * freq * 0.5 + phase * 0.7) * (amplitude * 0.4);
+
+          // Pointer interaction deflection
+          const dx = x - mouseRef.current.x;
+          const dy = y - mouseRef.current.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const influenceRadius = 240 * window.devicePixelRatio;
+
+          if (dist < influenceRadius) {
+            const pull = (1 - dist / influenceRadius) * 55 * window.devicePixelRatio;
+            y += (dy > 0 ? 1 : -1) * pull;
+          }
+
+          if (x === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            const cx = (prevX + x) / 2;
+            const cy = (prevY + y) / 2;
+            ctx.quadraticCurveTo(prevX, prevY, cx, cy);
+          }
+
+          prevX = x;
+          prevY = y;
+        }
+
+        ctx.stroke();
+
+        // Flowing text strings along selected wave lines
+        if (i % 2 === 1) {
+          const labelIndex = (i + Math.floor(t * 0.2)) % stringLabels.length;
+          const label = stringLabels[labelIndex];
+          const textX = ((t * 80 * window.devicePixelRatio + i * 220 * window.devicePixelRatio) % (width + 300)) - 150;
+          const textY = baseY + Math.sin(textX * freq + phase) * amplitude - 10 * window.devicePixelRatio;
+
+          ctx.font = `${10 * window.devicePixelRatio}px 'Geist Mono', monospace`;
+          ctx.fillStyle = isDarkTheme ? 'rgba(236, 232, 224, 0.35)' : 'rgba(20, 20, 20, 0.35)';
+          ctx.fillText(label, textX, textY);
+        }
+      }
+
+      animationFrameRef.current = requestAnimationFrame(render);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(animationFrameRef.current);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseleave', handlePointerLeave);
+    };
+  }, [theme]);
+
+  // ─── 4. Runtime Drift Canvas Simulation (#driftCv) ────────────────────────
+  useEffect(() => {
+    const cv = driftCanvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    let w = (cv.width = cv.offsetWidth * window.devicePixelRatio);
+    let h = (cv.height = cv.offsetHeight * window.devicePixelRatio);
+
+    const handleResize = () => {
+      if (!cv) return;
+      w = cv.width = cv.offsetWidth * window.devicePixelRatio;
+      h = cv.height = cv.offsetHeight * window.devicePixelRatio;
+    };
+    window.addEventListener('resize', handleResize);
+
+    const history = [];
+    const maxPoints = 80;
+    for (let i = 0; i < maxPoints; i++) {
+      history.push(0.038 + Math.random() * 0.008);
+    }
+
+    let frame = 0;
+
+    const renderDrift = () => {
+      frame++;
+      if (frame % 3 === 0) {
+        const target = isDrifting ? 0.284 : 0.041;
+        const currentVal = history[history.length - 1];
+        const nextVal = currentVal + (target - currentVal) * 0.12 + (Math.random() - 0.5) * 0.006;
+        history.push(Math.max(0.02, nextVal));
+        if (history.length > maxPoints) history.shift();
+        setDriftPsi(parseFloat(nextVal.toFixed(3)));
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid Lines
+      ctx.strokeStyle = theme === 'dark' ? 'rgba(236, 232, 224, 0.06)' : 'rgba(20, 20, 19, 0.06)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < h; y += 40 * window.devicePixelRatio) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Red Rollback Threshold Line at PSI = 0.200 (scale: 0.00 to 0.35)
+      const maxPsi = 0.35;
+      const thrY = h - (0.2 / maxPsi) * (h - 40 * window.devicePixelRatio) - 20 * window.devicePixelRatio;
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.setLineDash([6, 6]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, thrY);
+      ctx.lineTo(w, thrY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.font = `${10 * window.devicePixelRatio}px 'Geist Mono', monospace`;
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText('ROLLBACK THRESHOLD 0.200', 14 * window.devicePixelRatio, thrY - 6);
+
+      // Plot live points
+      ctx.beginPath();
+      const step = w / (maxPoints - 1);
+
+      history.forEach((val, i) => {
+        const px = i * step;
+        const py = h - (val / maxPsi) * (h - 40 * window.devicePixelRatio) - 20 * window.devicePixelRatio;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+
+      const currentVal = history[history.length - 1];
+      const isCritical = currentVal >= 0.2;
+
+      ctx.strokeStyle = isCritical ? '#ef4444' : '#10b981';
+      ctx.lineWidth = 2.5 * window.devicePixelRatio;
+      ctx.stroke();
+
+      // Shaded area under curve
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, isCritical ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.18)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      driftAnimationRef.current = requestAnimationFrame(renderDrift);
+    };
+
+    driftAnimationRef.current = requestAnimationFrame(renderDrift);
+
+    return () => {
+      cancelAnimationFrame(driftAnimationRef.current);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isDrifting, theme]);
+
+  // ─── 5. Inject Drift Event Handler ────────────────────────────────────────
+  const handleInjectDrift = useCallback(() => {
+    if (isDrifting) return;
+    setIsDrifting(true);
+
+    setDriftLogs((prev) => [
+      '› [ALERT] Distribution shift detected in batch #8421',
+      '› Feature income_annual PSI spiked to 0.284 (> 0.200)',
+      '› ATOMIC ROLLBACK TRIGGERED: Deprecating v2.1',
+      ...prev.slice(0, 3)
+    ]);
+
+    // Flash alert and switch active version after 1.8s
+    setTimeout(() => {
+      setActiveVersion('v2.0');
+      setDriftLogs((prev) => [
+        '› Restoring verified baseline v2.0...',
+        '› Rollback completed in 380ms. Baseline active.',
+        '› Drift mitigated. System stabilizing.',
+        ...prev.slice(0, 3)
+      ]);
+    }, 1800);
+
+    // Cool down after 5s
+    setTimeout(() => {
+      setIsDrifting(false);
+    }, 4500);
+  }, [isDrifting]);
+
+  // ─── 6. Tamper Audit Chain Handler ────────────────────────────────────────
+  const handleTamperBlock = useCallback((index) => {
+    setChainBlocks((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        data: 'TAMPERED: Disparate Impact manually overwritten to 0.999',
+        hash: 'DEADBEEF99999999999999999999999999999999999999999999999999999999'
+      };
+      return copy;
+    });
+    setTamperedIndex(index);
+  }, []);
+
+  const handleResetChain = useCallback(() => {
+    setChainBlocks(INITIAL_CHAIN_BLOCKS);
+    setTamperedIndex(null);
+  }, []);
 
   return (
-    <div className="sentinel-landing-root" style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
-      {/* ── 1. Enterprise Top Navigation ── */}
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 90,
-          backgroundColor: 'var(--color-surface)',
-          borderBottom: '1px solid var(--color-border)',
-          transition: 'background-color var(--transition-normal), border-color var(--transition-normal)'
-        }}
-      >
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 28px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Logo / Brand */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
-            <div style={{
-              width: 30,
-              height: 30,
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--color-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff'
-            }}>
-              <Shield size={17} strokeWidth={2.4} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-text)', lineHeight: 1.1 }}>
-                SENTINEL GOVERN
-              </span>
-              <span style={{ fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                AI Governance & Lifecycle Platform
-              </span>
-            </div>
+    <div className="sentinel-landing">
+      {/* Background Film Grain Overlay */}
+      <div className="grain" aria-hidden="true" />
+
+      {/* ─── Top Navigation ─────────────────────────────────────────────────── */}
+      <nav className="nav" id="nav">
+        {/* Left: Sentinel Govern Logo */}
+        <div className="nav-left">
+          <Link to="/" className="brand" aria-label="Sentinel Govern Home">
+            <span className="brand-mark" />
+            <span className="brand-text-label">SENTINEL GOVERN</span>
+          </Link>
+        </div>
+
+        {/* Center: Primary Navigation Links */}
+        <div className="nav-center">
+          <div className="nav-links">
+            <a href="#drift">Runtime</a>
+            <a href="#platform">Platform</a>
+            <a href="#frameworks">Compliance</a>
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="nav-right nav-actions">
+          {/* Functional Dark/Light Theme Toggle */}
+          <button
+            type="button"
+            className="btn btn-ghost theme-toggle-btn"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? <Sun size={15} color="var(--amber)" /> : <Moon size={15} color="var(--blue)" />}
+            <span className="theme-toggle-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
+
+          <Link to="/login" className="btn btn-ghost nav-signin-btn">
+            Sign in
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="landing-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-            <a href="#architecture" style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', textDecoration: 'none', transition: 'color var(--transition-fast)' }}>
-              Architecture
-            </a>
-            <a href="#lifecycle" style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', textDecoration: 'none', transition: 'color var(--transition-fast)' }}>
-              Governance Pipeline
-            </a>
-            <a href="#modules" style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', textDecoration: 'none', transition: 'color var(--transition-fast)' }}>
-              Product Modules
-            </a>
-            <a href="#access-matrix" style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', textDecoration: 'none', transition: 'color var(--transition-fast)' }}>
-              Separation of Duties
-            </a>
-            <a href="#security" style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', textDecoration: 'none', transition: 'color var(--transition-fast)' }}>
-              Security & Audit
-            </a>
-          </nav>
+          <Link to="/signup" className="btn btn-amber nav-console-btn">
+            Launch Console <span className="arr">→</span>
+          </Link>
 
-          {/* Right Actions: Theme Toggle & Auth Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <ThemeToggle />
+          <button
+            type="button"
+            className="menu-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? '✕' : '≡'}
+          </button>
+        </div>
+      </nav>
 
-            <Link
-              to="/login"
-              className="btn btn-secondary btn-sm"
-              style={{ fontSize: 12.5 }}
-            >
-              Sign In
+      {/* Mobile Navigation Drawer */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav-drawer" role="dialog" aria-label="Mobile Navigation">
+          <div className="mobile-nav-links">
+            <a href="#drift" onClick={() => setMobileMenuOpen(false)}>Runtime</a>
+            <a href="#platform" onClick={() => setMobileMenuOpen(false)}>Platform</a>
+            <a href="#frameworks" onClick={() => setMobileMenuOpen(false)}>Compliance</a>
+            <a href="#acts" onClick={() => setMobileMenuOpen(false)}>Lifecycle</a>
+            <a href="#chain" onClick={() => setMobileMenuOpen(false)}>Audit Trail</a>
+          </div>
+          <div className="mobile-nav-actions">
+            <Link to="/login" className="btn btn-ghost" onClick={() => setMobileMenuOpen(false)}>
+              Sign in
             </Link>
-
-            <Link
-              to="/signup"
-              className="btn btn-primary btn-sm"
-              style={{ fontSize: 12.5 }}
-            >
-              Get Started <ArrowRight size={13} />
+            <Link to="/signup" className="btn btn-amber" onClick={() => setMobileMenuOpen(false)}>
+              Launch Console <span className="arr">→</span>
             </Link>
+          </div>
+        </div>
+      )}
 
-            {/* Mobile menu trigger */}
-            <button
-              type="button"
-              className="landing-mobile-toggle"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle navigation menu"
-              style={{
-                display: 'none',
-                background: 'none',
-                border: 'none',
-                color: 'var(--color-text)',
-                cursor: 'pointer',
-                padding: 4
-              }}
-            >
-              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
+      {/* ─── Hero Section with Canvas Strings & HUD ─────────────────────────── */}
+      <header className="hero" data-screen-label="01 Hero">
+        {/* Animated Moving Strings & Interactive Mouse Field Canvas */}
+        <canvas id="field" ref={canvasRef} />
+
+        {/* Letterbox Lines */}
+        <div className="letterbox top" />
+        <div className="letterbox bot" />
+
+        {/* Viewfinder HUD */}
+        <div className="hud">
+          <i className="c tl" />
+          <i className="c tr" />
+          <i className="c bl" />
+          <i className="c br" />
+
+          {/* Top-Right Telemetry Readout */}
+          <div className="hud-read mono">
+            <div>
+              <div className="k">Disparate impact</div>
+              <div className="v" id="hDir">
+                0.884 <small>PASS</small>
+              </div>
+            </div>
+            <div>
+              <div className="k">Population stability</div>
+              <div className="v" id="hPsi">
+                {driftPsi.toFixed(3)} <small>{driftPsi < 0.1 ? 'HEALTHY' : driftPsi < 0.2 ? 'WARNING' : 'DRIFT'}</small>
+              </div>
+            </div>
+            <div>
+              <div className="k">Chain head</div>
+              <div className="v" id="hHash" style={{ fontSize: '14.5px' }}>
+                9f2c…a71e <small>✓</small>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom HUD Bar */}
+          <div className="hud-bot mono">
+            <span className="live">● REC — GATE ENFORCEMENT LIVE</span>
+            <span id="tc">{timecode}</span>
+            <span>EU AI ACT · ANNEX III</span>
           </div>
         </div>
 
-        {/* Mobile menu drop */}
-        {mobileMenuOpen && (
-          <div style={{
-            padding: '16px 28px',
-            backgroundColor: 'var(--color-surface)',
-            borderTop: '1px solid var(--color-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12
-          }}>
-            <a href="#architecture" onClick={() => setMobileMenuOpen(false)} style={{ fontSize: 13.5, color: 'var(--color-text)', textDecoration: 'none' }}>Architecture</a>
-            <a href="#lifecycle" onClick={() => setMobileMenuOpen(false)} style={{ fontSize: 13.5, color: 'var(--color-text)', textDecoration: 'none' }}>Governance Pipeline</a>
-            <a href="#modules" onClick={() => setMobileMenuOpen(false)} style={{ fontSize: 13.5, color: 'var(--color-text)', textDecoration: 'none' }}>Product Modules</a>
-            <a href="#access-matrix" onClick={() => setMobileMenuOpen(false)} style={{ fontSize: 13.5, color: 'var(--color-text)', textDecoration: 'none' }}>Separation of Duties</a>
-            <a href="#security" onClick={() => setMobileMenuOpen(false)} style={{ fontSize: 13.5, color: 'var(--color-text)', textDecoration: 'none' }}>Security & Audit</a>
+        {/* Hero Content */}
+        <div className="hero-inner">
+          <div className="slate mono fade-in">
+            <span className="dot" />
+            Every model
+            <span className="sep" />
+            Every decision
+            <span className="sep" />
+            On the record
           </div>
-        )}
-      </header>
 
-      {/* ── 2. Hero Section ── */}
-      <section
-        ref={heroRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        style={{
-          padding: '72px 28px 80px',
-          maxWidth: 1280,
-          margin: '0 auto',
-          position: 'relative'
-        }}
-      >
-        <div style={{ maxWidth: 840, margin: '0 auto', textAlign: 'center', marginBottom: 48 }}>
-          {/* Calm Institutional Badge */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-full)',
-            padding: '4px 14px',
-            marginBottom: 20,
-            boxShadow: 'var(--shadow-xs)'
-          }}>
-            <span className="status-dot healthy pulse" />
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', letterSpacing: '0.02em' }}>
-              Institutional AI Lifecycle Governance Plane
+          <h1 className="title">
+            <span className="ln">Nothing ships</span>
+            <span className="ln">without a</span>
+            <span className="ln">
+              <span className="it">verdict.</span>
             </span>
-          </div>
-
-          {/* Hero Headline */}
-          <h1 style={{
-            fontSize: 'clamp(38px, 4.8vw, 62px)',
-            fontWeight: 700,
-            lineHeight: 1.05,
-            letterSpacing: '-0.035em',
-            color: 'var(--color-text)',
-            marginBottom: 20
-          }}>
-            Govern AI from model development to production.
           </h1>
 
-          {/* Subheading */}
-          <p style={{
-            fontSize: 'clamp(16px, 1.8vw, 18px)',
-            color: 'var(--color-text-secondary)',
-            lineHeight: 1.6,
-            maxWidth: 680,
-            margin: '0 auto 32px'
-          }}>
-            Sentinel Govern provides enterprise organizations with a unified control layer for model evaluation, deterministic policy enforcement, multi-stakeholder approvals, runtime telemetry, and cryptographically chained auditability.
+          <p className="hero-sub fade-in">
+            Sentinel Govern replaces ethics checklists with cryptographic stage gates, statistical fairness proofs, automatic drift
+            rollback and a tamper‑evident audit chain — across the entire AI model lifecycle.
           </p>
 
-          {/* Action CTAs */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <Link to="/signup" className="btn btn-primary btn-lg" style={{ minWidth: 160 }}>
-              Get Started <ArrowRight size={15} />
+          <div className="hero-cta fade-in">
+            <Link to="/signup" className="btn btn-amber btn-lg">
+              Start free trial <span className="arr">→</span>
             </Link>
-            <a href="#lifecycle" className="btn btn-secondary btn-lg" style={{ minWidth: 160 }}>
-              Explore Lifecycle Pipeline
+            <a href="#acts" className="btn btn-line btn-lg">
+              <span className="play" />
+              Watch a model go to trial
             </a>
           </div>
-
-          {/* Credibility Anchors (Principles, No Fake Numbers) */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 28,
-            marginTop: 36,
-            flexWrap: 'wrap',
-            fontSize: 12.5,
-            color: 'var(--color-text-muted)'
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} color="var(--color-success)" />
-              Strict Separation of Duties
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} color="var(--color-success)" />
-              Deterministic Policy Gating
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} color="var(--color-success)" />
-              SHA-256 Tamper-Evident Ledger
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} color="var(--color-success)" />
-              Zero Production Bypasses
-            </span>
-          </div>
         </div>
 
-        {/* ── Hero Visual: Interactive Governance Lifecycle Simulation ── */}
-        <div
-          id="lifecycle"
-          style={{
-            transform: `perspective(1000px) rotateX(${-mousePos.y * 0.4}deg) rotateY(${mousePos.x * 0.4}deg)`,
-            transition: 'transform 300ms ease-out',
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-xl)',
-            boxShadow: 'var(--shadow-lg)',
-            padding: '28px 24px',
-            marginTop: 20
-          }}
-        >
-          {/* Header of Visual */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingBottom: 18,
-            borderBottom: '1px solid var(--color-border-subtle)',
-            marginBottom: 24,
-            flexWrap: 'wrap',
-            gap: 12
-          }}>
+        {/* Scroll Cue */}
+        <div className="scroll-cue mono fade-in">
+          <span>Scroll</span>
+          <i />
+        </div>
+      </header>
+
+      {/* ─── Manifesto Section ───────────────────────────────────────────────── */}
+      <section className="manifesto" data-screen-label="02 Manifesto">
+        <div className="eyebrow mono">
+          <b>00</b>The problem
+        </div>
+        <p id="manifesto">
+          Most AI governance is a spreadsheet and a promise. A model gets <span className="hl">deployed</span> because someone
+          said yes in a meeting. Then it drifts, discriminates, and nobody can prove who approved what. We built a system where{' '}
+          <span className="hl">trust is computed,</span> not asserted.
+        </p>
+      </section>
+
+      {/* ─── Lifecycle Section (Six Acts) ────────────────────────────────────── */}
+      <section className="acts" id="acts" data-screen-label="03 Lifecycle">
+        <div className="acts-pin">
+          {/* Left Pinned Content */}
+          <div className="acts-left">
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)' }}>
-                Interactive Control Plane Simulation
+              <div className="eyebrow mono" style={{ marginBottom: 20 }}>
+                <b>Lifecycle</b>A model on trial, in six acts
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text)', marginTop: 2 }}>
-                Model Lifecycle: Registration to Continuous Inference
+              <div className="act-num" id="actNum">
+                {ACTS_DATA[activeAct].idx}
+                <span id="actNumFill">{ACTS_DATA[activeAct].idx}</span>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="badge badge-info">
-                Active Simulation
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                Click any stage to inspect evidence
-              </span>
-            </div>
-          </div>
 
-          {/* Stepper Pipeline Stage Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-            gap: 10,
-            marginBottom: 24
-          }}>
-            {GOVERNANCE_STAGES.map((stg) => {
-              const isSelected = selectedStage.id === stg.id;
-              return (
-                <div
-                  key={stg.id}
-                  onClick={() => setSelectedStage(stg)}
-                  style={{
-                    backgroundColor: isSelected ? 'var(--color-surface-elevated)' : 'var(--color-surface-secondary)',
-                    border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    padding: '14px 12px',
-                    cursor: 'pointer',
-                    transition: 'all var(--transition-fast)',
-                    position: 'relative',
-                    boxShadow: isSelected ? '0 0 0 1px var(--color-primary), var(--shadow-sm)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', letterSpacing: '0.04em' }}>
-                      STAGE {stg.step}
-                    </span>
-                    <span className="status-dot healthy" />
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
-                    {stg.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
-                    {stg.role}
-                  </div>
-                  <div style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-                    backgroundColor: 'var(--color-surface)',
-                    padding: '3px 6px',
-                    borderRadius: 'var(--radius-xs)',
-                    border: '1px solid var(--color-border)',
-                    display: 'inline-block',
-                    fontFamily: 'JetBrains Mono, monospace'
-                  }}>
-                    {stg.metric}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Selected Stage Detail Evidence Panel */}
-          <div style={{
-            backgroundColor: 'var(--color-surface-secondary)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '20px 22px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>
-                    Stage {selectedStage.step}: {selectedStage.label}
+            <div className="act-text" id="actText">
+              <div className="mono" id="actKicker">
+                {ACTS_DATA[activeAct].kicker}
+              </div>
+              <h3 id="actTitle">{ACTS_DATA[activeAct].title}</h3>
+              <p id="actBody">{ACTS_DATA[activeAct].body}</p>
+              <div className="tags" id="actTags">
+                {ACTS_DATA[activeAct].tags.map((t) => (
+                  <span key={t} className="tag">
+                    {t}
                   </span>
-                  <span className="badge badge-success">
-                    Verified Gate
-                  </span>
-                </div>
-                <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                  {selectedStage.summary}
-                </p>
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                Enforced by: {selectedStage.role}
-              </div>
-            </div>
-
-            {/* Evidence Key-Value Matrix */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 12,
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '16px'
-            }}>
-              {Object.entries(selectedStage.evidence).map(([key, val]) => (
-                <div key={key}>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
-                  </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-text)', marginTop: 2, fontFamily: Array.isArray(val) || val.includes('SHA') || val.includes('%') ? 'JetBrains Mono, monospace' : 'inherit' }}>
-                    {Array.isArray(val) ? val.join(', ') : val}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 3. Editorial Section: The Executive Reality / Problem Statement ── */}
-      <section
-        id="architecture"
-        style={{
-          borderTop: '1px solid var(--color-border)',
-          borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-surface)',
-          padding: '80px 28px'
-        }}
-      >
-        <div style={{ maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: 48,
-            alignItems: 'flex-start'
-          }}>
-            {/* Left Column: Editorial Statement */}
-            <div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 12 }}>
-                The Enterprise Governance Challenge
-              </div>
-              <h2 style={{ fontSize: 'clamp(28px, 3.2vw, 42px)', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.15, color: 'var(--color-text)', marginBottom: 20 }}>
-                AI adoption without deterministic controls creates systemic liability.
-              </h2>
-              <p style={{ fontSize: 15, color: 'var(--color-text-secondary)', lineHeight: 1.65, marginBottom: 20 }}>
-                Enterprise organizations are integrating complex machine learning models into credit decisions, hiring pipelines, fraud detection, and regulatory processes.
-              </p>
-              <p style={{ fontSize: 14.5, color: 'var(--color-text-muted)', lineHeight: 1.65 }}>
-                Without a dedicated governance control plane, organizations face silent production drift, non-compliant demographic bias, single-party promotion shortcuts, and fragmented audit records that cannot withstand regulatory inspection.
-              </p>
-            </div>
-
-            {/* Right Column: 4 Real Failure Modes Sentinel Govern Solves */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {[
-                {
-                  code: '01',
-                  title: 'Silent Distribution Drift',
-                  desc: 'Production input distributions shift away from training baselines. Without continuous PSI telemetry, degraded accuracy occurs silently.'
-                },
-                {
-                  code: '02',
-                  title: 'Demographic Bias & Regulatory Fines',
-                  desc: 'EU AI Act and NIST AI RMF require quantitative verification of disparate impact before deployment. Unaudited models expose firms to substantial legal risk.'
-                },
-                {
-                  code: '03',
-                  title: 'Single-Party Promotion Shortcuts',
-                  desc: 'Data scientists deploying directly from notebooks bypass ethics and compliance review. Governance requires strict separation of duties.'
-                },
-                {
-                  code: '04',
-                  title: 'Unverifiable Audit Histories',
-                  desc: 'Scattered logs and informal tickets fail regulatory audits. Institutional compliance mandates append-only, cryptographically verifiable event chains.'
-                }
-              ].map((item) => (
-                <div
-                  key={item.code}
-                  style={{
-                    backgroundColor: 'var(--color-surface-secondary)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '16px 20px',
-                    display: 'flex',
-                    gap: 16
-                  }}
-                >
-                  <span style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    fontFamily: 'JetBrains Mono, monospace',
-                    color: 'var(--color-primary)',
-                    flexShrink: 0,
-                    paddingTop: 2
-                  }}>
-                    {item.code}
-                  </span>
-                  <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
-                      {item.title}
-                    </h3>
-                    <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                      {item.desc}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 4. Control Plane Architecture Layer ── */}
-      <section style={{ padding: '80px 28px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 48px' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 10 }}>
-            Unified Architectural Layer
-          </div>
-          <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-text)', marginBottom: 14 }}>
-            The governance bridge between ML engineering and executive oversight.
-          </h2>
-          <p style={{ fontSize: 14.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            Sentinel Govern sits between your model training pipelines and production inference endpoints, enforcing institutional policy without disrupting developer velocity.
-          </p>
-        </div>
-
-        {/* 3-Tier Layer Diagram */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 960, margin: '0 auto' }}>
-          {/* Tier 1: Stakeholder Identities */}
-          <div style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '18px 24px'
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              Layer 1: Enterprise Stakeholder Personas & Separation of Duties
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              {[
-                { role: 'ML Engineering Lead', focus: 'Model registration & version promotion' },
-                { role: 'AI Governance Officer', focus: 'Fairness benchmarks & policy enforcement' },
-                { role: 'Executive Approver', focus: 'Enterprise risk sign-off & release authorization' },
-                { role: 'Platform Administrator', focus: 'User access control & audit integrity' }
-              ].map((r) => (
-                <div key={r.role} style={{ backgroundColor: 'var(--color-surface-secondary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-text)' }}>{r.role}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{r.focus}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Tier 2: Sentinel Govern Control Plane (The Core) */}
-          <div style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border-strong)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '24px',
-            boxShadow: 'var(--shadow-md)',
-            position: 'relative'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Shield size={18} color="var(--color-primary)" />
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.01em' }}>
-                  Sentinel Govern Institutional Control Engine
-                </span>
-              </div>
-              <span className="badge badge-info" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}>
-                CORE CONTROL PLANE
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-              {[
-                { title: 'Deterministic Policy Gates', desc: 'Pre-deployment pass/block condition engine' },
-                { title: 'Fairness Benchmark Suite', desc: 'Disparate impact & parity calculations' },
-                { title: 'Multi-Party Sign-Off Matrix', desc: 'Strict separation of duty signature collection' },
-                { title: 'SHA-256 Chained Ledger', desc: 'Append-only cryptographic event verification' }
-              ].map((f) => (
-                <div key={f.title} style={{ backgroundColor: 'var(--color-surface-secondary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--color-primary)', display: 'inline-block', flexShrink: 0 }} />
-                    {f.title}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4, lineHeight: 1.45 }}>{f.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Tier 3: Production & Telemetry */}
-          <div style={{
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '18px 24px'
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 12 }}>
-              Layer 3: Operational Production Fleet & Telemetry Ingestion
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              {[
-                { sys: 'Inference Serving Fleet', desc: 'Zero unapproved container releases' },
-                { sys: 'PSI Drift Surveillance', desc: 'Continuous input feature stability analysis' },
-                { sys: 'Automated Incidents', desc: 'Instant stakeholder alerts upon threshold breach' },
-                { sys: 'Regulatory Dossiers', desc: 'Exportable EU AI Act compliance evidence' }
-              ].map((s) => (
-                <div key={s.sys} style={{ backgroundColor: 'var(--color-surface-secondary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-text)' }}>{s.sys}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{s.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 5. Product Deep-Dives: Real Sentinel Govern UI Mockups ── */}
-      <section
-        id="modules"
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          borderTop: '1px solid var(--color-border)',
-          borderBottom: '1px solid var(--color-border)',
-          padding: '80px 28px'
-        }}
-      >
-        <div style={{ maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 40px' }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 10 }}>
-              Real Platform Modules
-            </div>
-            <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-text)', marginBottom: 14 }}>
-              Designed for real enterprise workflows.
-            </h2>
-            <p style={{ fontSize: 14.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              Sentinel Govern is production-grade software engineered for ML teams, governance officers, and executive approvers. Inspect each module interface below.
-            </p>
-          </div>
-
-          {/* Module Selector Navigation Tabs */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            flexWrap: 'wrap',
-            marginBottom: 32
-          }}>
-            {PRODUCT_MODULES.map((mod, idx) => {
-              const isActive = activeModuleTab === idx;
-              return (
-                <button
-                  key={mod.id}
-                  type="button"
-                  onClick={() => setActiveModuleTab(idx)}
-                  className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: 12.5, padding: '6px 14px' }}
-                >
-                  {mod.title}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active Module Showcase Card */}
-          {(() => {
-            const current = PRODUCT_MODULES[activeModuleTab];
-            return (
-              <div style={{
-                backgroundColor: 'var(--color-bg)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-md)',
-                overflow: 'hidden',
-                maxWidth: 1080,
-                margin: '0 auto'
-              }}>
-                {/* Mockup Frame Header */}
-                <div style={{
-                  height: 42,
-                  backgroundColor: 'var(--color-surface-secondary)',
-                  borderBottom: '1px solid var(--color-border)',
-                  padding: '0 18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--color-border-strong)' }} />
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--color-border-strong)' }} />
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--color-border-strong)' }} />
-                    <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginLeft: 10, fontFamily: 'JetBrains Mono, monospace' }}>
-                      sentinel-govern / {current.id}
-                    </span>
-                  </div>
-                  <span className="badge badge-info" style={{ fontSize: 11 }}>
-                    {current.tag}
-                  </span>
-                </div>
-
-                {/* Mockup Body Content */}
-                <div style={{ padding: '32px 28px' }}>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                    gap: 36,
-                    alignItems: 'flex-start'
-                  }}>
-                    {/* Left: Module Narrative */}
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>
-                        {current.subtitle}
-                      </div>
-                      <h3 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', marginBottom: 14 }}>
-                        {current.title}
-                      </h3>
-                      <p style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.65, marginBottom: 24 }}>
-                        {current.description}
-                      </p>
-                      <Link to="/signup" className="btn btn-secondary btn-sm">
-                        Experience in Workspace <ArrowRight size={13} />
-                      </Link>
-                    </div>
-
-                    {/* Right: Realistic Application Component UI */}
-                    <div style={{
-                      backgroundColor: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-lg)',
-                      padding: '22px',
-                      boxShadow: 'var(--shadow-sm)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, borderBottom: '1px solid var(--color-border-subtle)', paddingBottom: 14 }}>
-                        <div>
-                          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--color-text)' }}>
-                            {current.uiSnippet.title}
-                          </div>
-                          <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                            State: <strong style={{ color: 'var(--color-text)' }}>{current.uiSnippet.state}</strong>
-                          </div>
-                        </div>
-                        <span className={`badge badge-${current.uiSnippet.badgeVariant}`}>
-                          {current.uiSnippet.badge}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-                        {current.uiSnippet.metrics.map((m) => (
-                          <div
-                            key={m.label}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              padding: '8px 10px',
-                              backgroundColor: 'var(--color-surface-secondary)',
-                              borderRadius: 'var(--radius-sm)',
-                              border: '1px solid var(--color-border-subtle)'
-                            }}
-                          >
-                            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                              {m.label}
-                            </span>
-                            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-text)', fontFamily: 'JetBrains Mono, monospace' }}>
-                              {m.value}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      </section>
-
-      {/* ── 6. Access Control & Separation of Duties Matrix ── */}
-      <section
-        id="access-matrix"
-        style={{
-          padding: '80px 28px',
-          maxWidth: 1280,
-          margin: '0 auto'
-        }}
-      >
-        <div style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 40px' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 10 }}>
-            Role-Based Authorization Architecture
-          </div>
-          <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-text)', marginBottom: 14 }}>
-            Strict separation of duties. No single point of failure.
-          </h2>
-          <p style={{ fontSize: 14.5, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-            In high-stakes enterprise governance, Platform Administrators cannot sign off on ethical audits, and ML Leads cannot approve their own models. Roles are enforced at the API route level.
-          </p>
-        </div>
-
-        {/* Access Matrix Table */}
-        <div className="table-container" style={{ maxWidth: 1080, margin: '0 auto' }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '22%' }}>Role Persona</th>
-                <th style={{ width: '28%' }}>Primary Responsibility</th>
-                <th style={{ width: '32%' }}>Authorized Governance Actions</th>
-                <th style={{ width: '18%' }}>Restricted Operations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                {
-                  role: 'Platform Administrator',
-                  responsibility: 'User verification, access control, audit verification & security integrity',
-                  actions: 'Verify users, manage platform credentials, verify cryptographic audit chains',
-                  restricted: 'Domain policy sign-offs'
-                },
-                {
-                  role: 'Machine Learning Lead',
-                  responsibility: 'Model development, version registration, evaluation submission & monitoring review',
-                  actions: 'Register models, create versions, upload evaluations, trigger authorized rollbacks',
-                  restricted: 'Governance / Exec sign-offs'
-                },
-                {
-                  role: 'AI Governance Officer',
-                  responsibility: 'Fairness audits, policy compliance gates & evidence review',
-                  actions: 'Inspect fairness benchmarks, manage policies (EU AI Act/NIST), approve or reject',
-                  restricted: 'Direct model deployment'
-                },
-                {
-                  role: 'Executive Approver',
-                  responsibility: 'Enterprise risk acceptance & executive production authorization',
-                  actions: 'Review high-risk systems, grant final production release authorization',
-                  restricted: 'Direct technical changes'
-                }
-              ].map((row) => (
-                <tr key={row.role}>
-                  <td>
-                    <strong style={{ color: 'var(--color-text)', fontSize: 13 }}>{row.role}</strong>
-                  </td>
-                  <td style={{ color: 'var(--color-text-secondary)', fontSize: 12.5 }}>
-                    {row.responsibility}
-                  </td>
-                  <td style={{ color: 'var(--color-text)', fontSize: 12.5 }}>
-                    {row.actions}
-                  </td>
-                  <td>
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: 'var(--color-danger-text)',
-                      backgroundColor: 'var(--color-danger-bg)',
-                      border: '1px solid var(--color-danger-border)',
-                      padding: '2px 8px',
-                      borderRadius: 'var(--radius-xs)',
-                      display: 'inline-block'
-                    }}>
-                      {row.restricted}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* ── 7. Institutional Security & Tamper-Evident Ledger ── */}
-      <section
-        id="security"
-        style={{
-          borderTop: '1px solid var(--color-border)',
-          borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-surface)',
-          padding: '80px 28px'
-        }}
-      >
-        <div style={{ maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: 48,
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: 12 }}>
-                Institutional Security
-              </div>
-              <h2 style={{ fontSize: 'clamp(26px, 3vw, 38px)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-text)', marginBottom: 16 }}>
-                Security engineered into every governance primitive.
-              </h2>
-              <p style={{ fontSize: 14.5, color: 'var(--color-text-secondary)', lineHeight: 1.65, marginBottom: 24 }}>
-                Sentinel Govern avoids surface-level marketing claims. Our credibility is grounded in cryptographic integrity, strict authentication boundaries, and tamper-resistant software architecture.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {[
-                  'Short-lived JWT access tokens with rotating, revocable HttpOnly cookies',
-                  'Bcrypt salt hashing (work factor 10) for native authentication credentials',
-                  'Cryptographic SHA-256 audit chaining: every event references the hash of its predecessor',
-                  'Role authorization verified by backend middleware on every state mutation',
-                  'Automated rate limiting and helmet security headers applied across all endpoints'
-                ].map((sec) => (
-                  <div key={sec} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <CheckCircle2 size={16} color="var(--color-success)" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{sec}</span>
-                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Cryptographic Ledger Code / Structure Demonstration */}
-            <div style={{
-              backgroundColor: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '24px',
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: 12,
-              color: 'var(--color-text)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, borderBottom: '1px solid var(--color-border)', paddingBottom: 10 }}>
-                <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>SHA-256 LEDGER BLOCK #1489</span>
-                <span className="badge badge-success" style={{ fontSize: 10.5 }}>INTEGRITY: OK</span>
-              </div>
-              <div style={{ color: 'var(--color-text-muted)', marginBottom: 8 }}>// Cryptographically sealed block header</div>
-              <div style={{ marginBottom: 4 }}><span style={{ color: 'var(--color-text-muted)' }}>blockId:</span> "blk_99a4c102"</div>
-              <div style={{ marginBottom: 4 }}><span style={{ color: 'var(--color-text-muted)' }}>timestamp:</span> "2026-10-07T18:30:14.281Z"</div>
-              <div style={{ marginBottom: 4 }}><span style={{ color: 'var(--color-text-muted)' }}>eventType:</span> "POLICY_GATE_PASSED"</div>
-              <div style={{ marginBottom: 4 }}><span style={{ color: 'var(--color-text-muted)' }}>actorId:</span> "compliance_officer_01"</div>
-              <div style={{ marginBottom: 4 }}><span style={{ color: 'var(--color-text-muted)' }}>parentHash:</span> "88de0b44fe9231...7a01"</div>
-              <div style={{ marginBottom: 14 }}><span style={{ color: 'var(--color-text-muted)' }}>currentHash:</span> <span style={{ color: 'var(--color-primary)' }}>"7f9a3c21bd09e8...bb49"</span></div>
-              <div style={{
-                backgroundColor: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '10px 12px',
-                fontSize: 11,
-                color: 'var(--color-text-secondary)',
-                lineHeight: 1.5
-              }}>
-                If any historical block payload is modified, the cryptographic hash verification fails across all subsequent blocks in the chain.
-              </div>
+            {/* Interactive Act Reel Navigator */}
+            <div className="reel mono" id="reel">
+              {ACTS_DATA.map((act, i) => (
+                <button
+                  key={act.idx}
+                  type="button"
+                  className={`reel-btn ${activeAct === i ? 'active' : ''}`}
+                  onClick={() => setActiveAct(i)}
+                  aria-label={`Jump to Act ${act.idx}`}
+                >
+                  {act.idx}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* ── 8. Final Call to Action ── */}
-      <section style={{ padding: '96px 28px', textAlign: 'center', maxWidth: 840, margin: '0 auto' }}>
-        <h2 style={{ fontSize: 'clamp(28px, 3.5vw, 44px)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-text)', marginBottom: 16 }}>
-          Bring governance into your AI lifecycle.
-        </h2>
-        <p style={{ fontSize: 16, color: 'var(--color-text-secondary)', lineHeight: 1.6, maxWidth: 580, margin: '0 auto 36px' }}>
-          Protect your organization from unverified deployments, silent drift, and compliance violations with the Sentinel Govern control plane.
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <Link to="/signup" className="btn btn-primary btn-lg" style={{ minWidth: 160 }}>
-            Get Started <ArrowRight size={15} />
-          </Link>
-          <Link to="/login" className="btn btn-secondary btn-lg" style={{ minWidth: 160 }}>
-            Sign In to Workspace
-          </Link>
-        </div>
-      </section>
+          {/* Right Console Screen */}
+          <div className="screen">
+            <div className="screen-bar mono">
+              <span className="lights">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span id="screenPath">{ACTS_DATA[activeAct].screenPath}</span>
+              <span id="screenStat" style={{ color: 'var(--blue)' }}>
+                {ACTS_DATA[activeAct].screenStatus}
+              </span>
+            </div>
 
-      {/* ── 9. Institutional Enterprise Footer ── */}
-      <footer style={{
-        backgroundColor: 'var(--color-surface)',
-        borderTop: '1px solid var(--color-border)',
-        padding: '56px 28px 36px'
-      }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 40,
-            marginBottom: 48
-          }}>
-            {/* Identity Column */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <div style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--color-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff'
-                }}>
-                  <Shield size={16} strokeWidth={2.4} />
+            <div className="screen-body">
+              {/* Panel 0: Model Registration */}
+              <div className={`panel ${activeAct === 0 ? 'on' : ''}`} data-p="0">
+                <div className="risk-stamp">
+                  HIGH‑RISK
+                  <br />
+                  ANNEX III · 5(b)
                 </div>
-                <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-text)' }}>
-                  SENTINEL GOVERN
-                </span>
+                <div className="json" id="jsonOut">
+{`{
+  "modelName": "CreditRisk Underwriting Ensemble v2.1",
+  "framework": "PyTorch 2.4.0 + LightGBM",
+  "intendedPurpose": "Consumer creditworthiness assessment",
+  "regulatoryClassification": "EU AI Act Annex III Section 5(b)",
+  "owner": "alex.chen@sentinel.govern",
+  "trainingLineage": {
+    "dataset": "credit_train_2025_q4.parquet",
+    "records": 482109,
+    "sha256": "4a71b...892e"
+  },
+  "protectedDemographicsAudited": [
+    "age_band",
+    "gender",
+    "postal_region"
+  ]
+}`}
+                </div>
               </div>
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 260 }}>
-                AI Governance & Lifecycle Platform.
-              </p>
-            </div>
 
-            {/* Links 1 */}
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 14 }}>
-                Architecture
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                <a href="#lifecycle" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Governance Pipeline</a>
-                <a href="#architecture" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Control Plane Layer</a>
-                <a href="#access-matrix" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Separation of Duties</a>
-                <a href="#security" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Cryptographic Ledger</a>
-              </div>
-            </div>
+              {/* Panel 1: Fairness Studio */}
+              <div className={`panel ${activeAct === 1 ? 'on' : ''}`} data-p="1">
+                <div className="fair-head">
+                  <div>
+                    <div className="mono" style={{ color: 'var(--bone-3)' }}>
+                      Disparate impact ratio
+                    </div>
+                    <div className="big-metric">
+                      <span id="dirCount">0.884</span>
+                      <small>≥ 0.80 · PASS</small>
+                    </div>
+                  </div>
+                  <div className="mono" style={{ color: 'var(--bone-3)', textAlign: 'right' }}>
+                    Protected attr.
+                    <br />
+                    <span style={{ color: 'var(--bone)', fontWeight: 600 }}>age_band</span>
+                  </div>
+                </div>
 
-            {/* Links 2 */}
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 14 }}>
-                Governance
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                <a href="#modules" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Model Registry</a>
-                <a href="#modules" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Fairness & Bias Studio</a>
-                <a href="#modules" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Policy Gating</a>
-                <a href="#modules" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Multi-Party Sign-Off</a>
-              </div>
-            </div>
+                <div className="bars" id="bars">
+                  <div className="thr" style={{ bottom: '58%' }}>
+                    80% LEGAL RULE
+                  </div>
+                  <div className="bar-col" style={{ height: '88%' }} title="Subgroup 18-35: 88.4%" />
+                  <div className="bar-col" style={{ height: '94%' }} title="Subgroup 36-55: 94.2%" />
+                  <div className="bar-col" style={{ height: '85%' }} title="Subgroup 56+: 85.1%" />
+                </div>
 
-            {/* Links 3 */}
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 14 }}>
-                Workspace
+                <div className="bar-labels mono" id="barLabels">
+                  <span>18–35 (0.88)</span>
+                  <span>36–55 (0.94)</span>
+                  <span>56+ (0.85)</span>
+                </div>
+
+                <div className="fair-row mono">
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>Dem. parity Δ</div>
+                    <div className="v">0.031</div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>Equalized odds Δ</div>
+                    <div className="v">0.044</div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>Samples</div>
+                    <div className="v">184,210</div>
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                <Link to="/login" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Sign In</Link>
-                <Link to="/signup" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Request Access</Link>
-                <Link to="/forgot-password" style={{ color: 'var(--color-text-secondary)', textDecoration: 'none' }}>Reset Password</Link>
+
+              {/* Panel 2: Policy Gates */}
+              <div className={`panel ${activeAct === 2 ? 'on' : ''}`} data-p="2">
+                <div className="rules" id="rules">
+                  <div className="rule-item">
+                    <span>POL-01: Disparate Impact Ratio ≥ 0.800</span>
+                    <span className="rule-status pass">0.884 ✓ PASS</span>
+                  </div>
+                  <div className="rule-item">
+                    <span>POL-02: Minimum ROC-AUC Benchmark ≥ 0.850</span>
+                    <span className="rule-status pass">0.892 ✓ PASS</span>
+                  </div>
+                  <div className="rule-item">
+                    <span>POL-03: Lineage & Risk Assessment Cataloged</span>
+                    <span className="rule-status pass">VERIFIED ✓</span>
+                  </div>
+                </div>
+
+                <div className="gate-verdict" id="verdict">
+                  <div>
+                    <div className="mono" style={{ color: 'var(--bone-3)' }}>
+                      Gate 03 / Pre‑deployment
+                    </div>
+                    <div className="serif" id="verdictText">
+                      All Mandatory Gates Satisfied
+                    </div>
+                  </div>
+                  <div className="mono" id="verdictCode" style={{ color: 'var(--green)', fontWeight: 700 }}>
+                    PASS — AUTHORIZED
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 3: Quorum Sign-off */}
+              <div className={`panel ${activeAct === 3 ? 'on' : ''}`} data-p="3">
+                <div className="quorum" id="quorum">
+                  <div className="q-signer">
+                    <div className="q-signer-info">
+                      <div className="q-avatar">ML</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>Alex Chen</div>
+                        <div className="mono" style={{ fontSize: '11px', color: 'var(--bone-3)' }}>
+                          alex.chen@sentinel.govern
+                        </div>
+                      </div>
+                    </div>
+                    <span className="rule-status pass">SIGNED ✓</span>
+                  </div>
+
+                  <div className="q-signer">
+                    <div className="q-signer-info">
+                      <div className="q-avatar">GO</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>Elena Rostova</div>
+                        <div className="mono" style={{ fontSize: '11px', color: 'var(--bone-3)' }}>
+                          governance@sentinel.govern
+                        </div>
+                      </div>
+                    </div>
+                    <span className="rule-status pass">SIGNED ✓</span>
+                  </div>
+
+                  <div className="q-signer">
+                    <div className="q-signer-info">
+                      <div className="q-avatar">EA</div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>Marcus Vance</div>
+                        <div className="mono" style={{ fontSize: '11px', color: 'var(--bone-3)' }}>
+                          vp-risk@sentinel.govern
+                        </div>
+                      </div>
+                    </div>
+                    <span className="rule-status pass">SIGNED ✓</span>
+                  </div>
+                </div>
+
+                <div className="quorum-bar mono">
+                  <span style={{ color: 'var(--bone-3)' }}>Quorum</span>
+                  <div className="track">
+                    <i id="qTrack" style={{ width: '100%' }} />
+                  </div>
+                  <span id="qCount" style={{ color: 'var(--blue)', fontWeight: 700 }}>
+                    3 / 3
+                  </span>
+                </div>
+              </div>
+
+              {/* Panel 4: Telemetry Stream */}
+              <div className={`panel ${activeAct === 4 ? 'on' : ''}`} data-p="4">
+                <div className="tele-head mono">
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>PSI · income</div>
+                    <div className="v" id="tPsi" style={{ color: 'var(--green)' }}>
+                      0.041
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>Requests / min</div>
+                    <div className="v" id="tRpm">
+                      12,408
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--bone-3)' }}>Rollback threshold</div>
+                    <div className="v" style={{ color: 'var(--red)' }}>
+                      0.200
+                    </div>
+                  </div>
+                </div>
+
+                <div className="chart">
+                  <svg id="teleSvg" viewBox="0 0 400 140" preserveAspectRatio="none">
+                    <path
+                      d="M0,80 Q50,40 100,75 T200,60 T300,85 T400,65 L400,140 L0,140 Z"
+                      fill="rgba(49, 94, 251, 0.15)"
+                    />
+                    <path
+                      d="M0,80 Q50,40 100,75 T200,60 T300,85 T400,65"
+                      fill="none"
+                      stroke="var(--blue)"
+                      strokeWidth="2.5"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Panel 5: Audit Chain */}
+              <div className={`panel ${activeAct === 5 ? 'on' : ''}`} data-p="5">
+                <div className="chain-mini" id="chainMini">
+                  <div className="chain-mini-block mono">
+                    <span>#1481 MODEL_REGISTERED</span>
+                    <span style={{ color: 'var(--bone-3)' }}>8f2a…a709</span>
+                  </div>
+                  <div className="chain-mini-block mono">
+                    <span>#1482 FAIRNESS_BENCHMARKED</span>
+                    <span style={{ color: 'var(--bone-3)' }}>3c7e…7d8e</span>
+                  </div>
+                  <div className="chain-mini-block mono">
+                    <span>#1483 POLICY_GATES_PASSED</span>
+                    <span style={{ color: 'var(--bone-3)' }}>6a5b…6a5b</span>
+                  </div>
+                  <div className="chain-mini-block mono">
+                    <span>#1484 QUORUM_CONSENT_SEALED</span>
+                    <span style={{ color: 'var(--bone-3)' }}>9f2c…cdef</span>
+                  </div>
+                </div>
+
+                <div className="gate-verdict open" style={{ marginTop: 'auto' }}>
+                  <div>
+                    <div className="mono" style={{ color: 'var(--bone-3)' }}>
+                      Chain integrity
+                    </div>
+                    <div className="serif">2,481 entries. Zero breaks.</div>
+                  </div>
+                  <div className="mono" style={{ color: 'var(--green)', fontWeight: 700 }}>
+                    SHA‑256 ✓
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Legal / Institutional Disclaimer */}
-          <div style={{
-            borderTop: '1px solid var(--color-border-subtle)',
-            paddingTop: 24,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12,
-            fontSize: 12,
-            color: 'var(--color-text-muted)'
-          }}>
-            <div>
-              © 2026 Sentinel Govern. AI Governance & Lifecycle Platform.
+      {/* ─── Audit Trail & Interactive Tamper Section ──────────────────────── */}
+      <section className="sec" id="chain" data-screen-label="04 Audit chain">
+        <div className="sec-head">
+          <h2>
+            Try to <span className="it">rewrite</span>
+            <br />
+            history.
+          </h2>
+          <p>
+            Every approval, override and deployment is hashed into the next. Change a single byte anywhere — and every record after
+            it testifies against you. Go on, tamper with one.
+          </p>
+        </div>
+
+        {/* Linked Cryptographic Blocks */}
+        <div className="chain" id="chainEl">
+          {chainBlocks.map((blk, idx) => {
+            const isTampered = tamperedIndex !== null && idx >= tamperedIndex;
+            return (
+              <div key={blk.id} className={`chain-block ${isTampered ? 'tampered' : ''}`}>
+                <div className="chain-header mono">
+                  <span style={{ fontWeight: 700 }}>BLOCK #{blk.id}</span>
+                  <span style={{ color: isTampered ? 'var(--red)' : 'var(--green)' }}>{isTampered ? '✗ BROKEN' : '✓ VALID'}</span>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--bone)' }}>{blk.action}</div>
+                <div className="chain-hash">{blk.hash.slice(0, 24)}…</div>
+                <div style={{ fontSize: '11px', color: 'var(--bone-3)', marginBottom: 12 }}>{blk.data}</div>
+                <button
+                  type="button"
+                  className="tamper-btn mono"
+                  onClick={() => handleTamperBlock(idx)}
+                  disabled={isTampered}
+                >
+                  {isTampered ? 'Manipulated' : 'Tamper with Block'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Chain Integrity Status Card */}
+        <div className={`chain-status ${tamperedIndex !== null ? 'tampered' : ''}`} id="chainStatus">
+          <div>
+            <div className="mono" style={{ color: 'var(--bone-3)' }}>
+              Verification
             </div>
-            <div>
-              Sentinel Govern is an operational governance platform, not legal or regulatory advice.
+            <div className="serif" id="chainMsg">
+              {tamperedIndex !== null
+                ? `🚨 Tamper detected at Block #${chainBlocks[tamperedIndex].id}! SHA-256 chain broken.`
+                : 'Chain intact. Every signature checks out.'}
             </div>
           </div>
+          <button type="button" className="btn btn-line" id="chainReset" onClick={handleResetChain}>
+            Restore ledger
+          </button>
+        </div>
+      </section>
+
+      {/* ─── Runtime Drift & Atomic Rollback Section ────────────────────────── */}
+      <section className="sec" id="drift" style={{ paddingTop: '6vh' }} data-screen-label="05 Drift">
+        <div className="sec-head">
+          <h2>
+            When reality <span className="it">drifts,</span>
+            <br />
+            we pull the plug.
+          </h2>
+          <p>
+            Live population‑stability monitoring on every feature. Cross the threshold and Sentinel atomically rolls production
+            back to the last verified baseline — with the evidence already filed.
+          </p>
+        </div>
+
+        <div className="drift">
+          {/* Real-time Waveform Canvas */}
+          <div className="drift-chart">
+            <span className="lab mono">PSI · rolling 60s · credit-risk</span>
+            <canvas id="driftCv" ref={driftCanvasRef} />
+            <div className={`flash ${isDrifting ? 'active' : ''}`} id="flash" />
+          </div>
+
+          {/* Drift Controls & Incident Log */}
+          <div className="drift-side">
+            <div>
+              <div className="mono" style={{ color: 'var(--bone-3)' }}>
+                Current PSI
+              </div>
+              <div className="v" id="dPsi" style={{ color: driftPsi >= 0.2 ? 'var(--red)' : 'var(--bone)' }}>
+                {driftPsi.toFixed(3)}
+              </div>
+            </div>
+
+            <div className="versions" id="versions">
+              <div className={`ver ${activeVersion === 'v2.2' ? 'live' : ''}`} data-v="v2.2">
+                v2.2 · candidate
+              </div>
+              <div className={`ver ${activeVersion === 'v2.1' ? 'live' : ''}`} data-v="v2.1">
+                v2.1 · verified
+              </div>
+              <div className={`ver ${activeVersion === 'v2.0' ? 'live' : ''}`} data-v="v2.0">
+                v2.0 · baseline
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-line"
+              id="injectDrift"
+              onClick={handleInjectDrift}
+              disabled={isDrifting}
+              style={{ justifyContent: 'center' }}
+            >
+              {isDrifting ? 'Simulating Distribution Shift...' : 'Inject distribution shift'}
+            </button>
+
+            <div className="drift-log" id="driftLog">
+              {driftLogs.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Platform Bento Grid ────────────────────────────────────────────── */}
+      <section className="sec" id="platform" style={{ paddingTop: '6vh' }} data-screen-label="06 Platform">
+        <div className="sec-head">
+          <h2>
+            One system.
+            <br />
+            <span className="it">Five</span> instruments.
+          </h2>
+          <p>Built for the three people who must agree before a model touches a customer — and the regulator who'll ask about it later.</p>
+        </div>
+
+        <div className="bento">
+          {/* Card 1: Fairness Engine */}
+          <div className="card c1">
+            <span className="mono" style={{ fontSize: '11px', color: 'var(--blue)' }}>
+              01 · Fairness engine
+            </span>
+            <svg className="viz ring" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" strokeWidth="2" />
+              <circle
+                id="ringArc"
+                cx="60"
+                cy="60"
+                r="52"
+                fill="none"
+                stroke="var(--blue)"
+                strokeWidth="2.5"
+                strokeDasharray="326.7"
+                strokeDashoffset="38"
+                transform="rotate(-90 60 60)"
+              />
+              <text x="60" y="66" textAnchor="middle" fill="currentColor" fontFamily="Instrument Serif" fontSize="30">
+                .884
+              </text>
+            </svg>
+            <h4>
+              Statistical proof,
+              <br />
+              not good intentions.
+            </h4>
+            <p>
+              Disparate impact, demographic parity and equalized odds — computed per protected attribute and checked against the
+              four‑fifths rule automatically.
+            </p>
+          </div>
+
+          {/* Card 2: Quorum Gates */}
+          <div className="card c2">
+            <span className="mono" style={{ fontSize: '11px', color: 'var(--blue)' }}>
+              02 · Quorum gates
+            </span>
+            <div className="big-num">3/3</div>
+            <h4>No single yes.</h4>
+            <p>ML Lead, Governance Officer, Executive. Cryptographically signed.</p>
+          </div>
+
+          {/* Card 3: Atomic Rollback */}
+          <div className="card c3">
+            <span className="mono" style={{ fontSize: '11px', color: 'var(--blue)' }}>
+              03 · Atomic rollback
+            </span>
+            <h4>One click back to the last good model.</h4>
+            <p>Verified baselines, ready in under a second.</p>
+          </div>
+
+          {/* Card 4: Audit Chain */}
+          <div className="card c4">
+            <span className="mono" style={{ fontSize: '11px', color: 'var(--blue)' }}>
+              04 · Audit chain
+            </span>
+            <h4>Tamper‑evident by construction.</h4>
+            <p>SHA‑256 linked ledger with active tamper simulation.</p>
+          </div>
+
+          {/* Card 5: Dossier Export */}
+          <div className="card c5">
+            <span className="mono" style={{ fontSize: '11px', color: 'var(--blue)' }}>
+              05 · Dossier export
+            </span>
+            <div className="dossier">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            <h4>Annex IV, in one click.</h4>
+            <p>EU AI Act technical documentation, assembled from evidence.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Frameworks Marquee ─────────────────────────────────────────────── */}
+      <section id="frameworks" className="marq" data-screen-label="07 Frameworks">
+        <div className="marq-track">
+          <span>EU AI Act · Annex III</span>
+          <span>NIST AI RMF 1.0</span>
+          <span>ISO/IEC 42001</span>
+          <span>NYC Local Law 144</span>
+          <span>SR 11‑7</span>
+          <span>EU AI Act · Annex III</span>
+          <span>NIST AI RMF 1.0</span>
+          <span>ISO/IEC 42001</span>
+          <span>NYC Local Law 144</span>
+          <span>SR 11‑7</span>
+        </div>
+      </section>
+
+      {/* ─── Finale CTA ─────────────────────────────────────────────────────── */}
+      <section className="finale" data-screen-label="08 Finale">
+        <div className="eyebrow mono" style={{ marginBottom: 34 }}>
+          <b>Fin</b>Your move
+        </div>
+        <h2>
+          Govern like
+          <br />
+          it's <span className="it">evidence.</span>
+        </h2>
+        <p>Register your first model in under ten minutes. Your auditors will think you hired a team.</p>
+        <div className="hero-cta">
+          <Link to="/signup" className="btn btn-amber btn-lg">
+            Start free trial <span className="arr">→</span>
+          </Link>
+          <Link to="/login" className="btn btn-line btn-lg">
+            Book a governance review
+          </Link>
+        </div>
+      </section>
+
+      {/* ─── Footer ─────────────────────────────────────────────────────────── */}
+      <footer>
+        <div className="foot-grid">
+          <div>
+            <Link to="/" className="brand" aria-label="Sentinel Govern Home">
+              <span className="brand-mark" />
+              SENTINEL GOVERN
+            </Link>
+            <p style={{ color: 'var(--bone-3)', fontSize: '14px', marginTop: '18px', maxWidth: '280px' }}>
+              Deterministic governance for the AI model lifecycle.
+            </p>
+            <div className="badges mono">
+              <span className="tag">EU AI ACT</span>
+              <span className="tag">NIST RMF</span>
+              <span className="tag">ISO 42001</span>
+            </div>
+          </div>
+
+          <div>
+            <h5>Platform</h5>
+            <ul>
+              <li>
+                <Link to="/app/models">Model registry</Link>
+              </li>
+              <li>
+                <Link to="/app/fairness">Fairness studio</Link>
+              </li>
+              <li>
+                <Link to="/app/policies">Policy gates</Link>
+              </li>
+              <li>
+                <Link to="/app/monitoring">Telemetry</Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h5>Compliance</h5>
+            <ul>
+              <li>
+                <a href="#frameworks">EU AI Act</a>
+              </li>
+              <li>
+                <a href="#frameworks">NIST AI RMF</a>
+              </li>
+              <li>
+                <a href="#frameworks">ISO/IEC 42001</a>
+              </li>
+              <li>
+                <Link to="/app/dossier">Trust center</Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h5>Developers</h5>
+            <ul>
+              <li>
+                <Link to="/app/audit">Audit API</Link>
+              </li>
+              <li>
+                <a href="#chain">Cryptographic Hash</a>
+              </li>
+              <li>
+                <Link to="/app/monitoring">Evidently AI 0.7.23</Link>
+              </li>
+              <li>
+                <Link to="/app/issues">Issue Reporting</Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h5>Company</h5>
+            <ul>
+              <li>
+                <Link to="/login">Sign In</Link>
+              </li>
+              <li>
+                <Link to="/signup">Start Free Trial</Link>
+              </li>
+              <li>
+                <Link to="/app/profile">Enterprise Account</Link>
+              </li>
+              <li>
+                <a href="mailto:support@sentinel.govern">Contact</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="foot-base mono">
+          <span>© 2026 Sentinel Govern</span>
+          <span className="status">
+            <i />
+            All systems operational
+          </span>
         </div>
       </footer>
     </div>

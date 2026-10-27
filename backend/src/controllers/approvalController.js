@@ -2,13 +2,54 @@ import { Approval } from '../models/Approval.js';
 import { ModelVersion } from '../models/ModelVersion.js';
 import { Model } from '../models/Model.js';
 import { Policy } from '../models/Policy.js';
+import { Evaluation } from '../models/Evaluation.js';
 import { recordAuditEvent } from '../services/auditEngine.js';
+
+export async function resolveRequiredApprovers(model) {
+  if (!model) {
+    return {
+      policy: null,
+      requiredRoles: ['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER']
+    };
+  }
+  let policy = null;
+  if (model.policyId) {
+    policy = await Policy.findById(model.policyId);
+  }
+  if (!policy && model._id) {
+    policy = await Policy.findOne({
+      $or: [
+        { applicableModelIds: model._id },
+        { applicableModelId: model._id }
+      ],
+      isActive: true
+    });
+  }
+  if (!policy && model.riskLevel) {
+    policy = await Policy.findOne({
+      targetRiskLevel: { $in: [model.riskLevel, 'ALL'] },
+      $or: [
+        { applicableModelIds: { $size: 0 } },
+        { applicableModelIds: { $exists: false } }
+      ],
+      applicableModelId: null,
+      isActive: true
+    });
+  }
+  const requiredRoles = (policy?.requiredApprovers && Array.isArray(policy.requiredApprovers) && policy.requiredApprovers.length > 0)
+    ? policy.requiredApprovers
+    : ['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER'];
+  return { policy, requiredRoles };
+}
 
 export async function getApprovalsByVersion(req, res) {
   try {
     const { versionId } = req.params;
+    const version = await ModelVersion.findById(versionId);
+    const model = version ? await Model.findById(version.modelId) : null;
+    const { policy, requiredRoles } = await resolveRequiredApprovers(model);
     const approvals = await Approval.find({ versionId }).sort({ createdAt: 1 });
-    res.json({ success: true, count: approvals.length, data: approvals });
+    res.json({ success: true, count: approvals.length, data: approvals, requiredRoles, policy });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -37,14 +78,17 @@ export async function getPendingApprovals(req, res) {
       versionId: { $in: versions.map(v => v._id) }
     }).sort({ createdAt: 1 });
 
-    const result = versions.map(v => {
+    const result = await Promise.all(versions.map(async (v) => {
       const versionApprovals = approvals.filter(a => String(a.versionId) === String(v._id));
+      const { policy, requiredRoles } = await resolveRequiredApprovers(v.modelId);
       return {
         version: v,
         model: v.modelId,
+        policy,
+        requiredRoles,
         approvals: versionApprovals
       };
-    });
+    }));
 
     res.json({ success: true, count: result.length, data: result });
   } catch (error) {
@@ -97,32 +141,8 @@ export async function submitApprovalDecision(req, res) {
       });
     }
 
-    // Check policy requirements for this model (model.policyId first, then applicableModelIds)
-    let policy = null;
-    if (model.policyId) {
-      policy = await Policy.findById(model.policyId);
-    }
-    if (!policy) {
-      policy = await Policy.findOne({
-        $or: [
-          { applicableModelIds: model._id },
-          { applicableModelId: model._id }
-        ],
-        isActive: true
-      });
-    }
-    if (!policy) {
-      policy = await Policy.findOne({
-        targetRiskLevel: { $in: [model.riskLevel, 'ALL'] },
-        $or: [
-          { applicableModelIds: { $size: 0 } },
-          { applicableModelIds: { $exists: false } }
-        ],
-        applicableModelId: null,
-        isActive: true
-      });
-    }
-    const requiredRoles = policy?.requiredApprovers || ['ML_LEAD', 'GOVERNANCE_OFFICER', 'EXECUTIVE_APPROVER'];
+    // Check policy requirements for this model
+    const { policy, requiredRoles } = await resolveRequiredApprovers(model);
 
     // Platform Admin separation of duties: Platform Admin must not receive model approval or sign-off authority
     if (role === 'PLATFORM_ADMIN') {
@@ -177,6 +197,39 @@ export async function submitApprovalDecision(req, res) {
     if (hasRejection) {
       version.approvalStatus = 'REJECTED';
       await version.save();
+
+      // Notify stakeholders about approval rejection
+      try {
+        const { dispatchNotification } = await import('../services/notificationService.js');
+        await dispatchNotification({
+          recipientRole: 'ML_LEAD',
+          excludeUserId: req.user?._id,
+          title: `Approval rejected: ${model.name} ${version.version}`,
+          message: `${approverName} (${role}) rejected ${model.name} (${version.version}). Rationale: ${comment || 'No comment provided'}.`,
+          type: 'APPROVAL_REJECTED',
+          severity: 'CRITICAL',
+          targetUrl: '/app/approvals',
+          modelId: model._id,
+          versionId: version._id,
+          idempotencyKey: `approval_rejected_${version._id}_${approval._id}`,
+          actor: approverName
+        });
+        await dispatchNotification({
+          recipientRole: 'GOVERNANCE_OFFICER',
+          excludeUserId: req.user?._id,
+          title: `Approval rejected: ${model.name} ${version.version}`,
+          message: `${approverName} (${role}) rejected ${model.name} (${version.version}). Rationale: ${comment || 'No comment provided'}.`,
+          type: 'APPROVAL_REJECTED',
+          severity: 'CRITICAL',
+          targetUrl: '/app/approvals',
+          modelId: model._id,
+          versionId: version._id,
+          idempotencyKey: `approval_rejected_gov_${version._id}_${approval._id}`,
+          actor: approverName
+        });
+      } catch (notifErr) {
+        console.warn('[Notification] Approval rejection notification warning:', notifErr.message);
+      }
     } else if (isFullyApproved) {
       version.approvalStatus = 'APPROVED';
       version.lifecycleStatus = 'APPROVED';
@@ -198,10 +251,74 @@ export async function submitApprovalDecision(req, res) {
         }
       });
 
+      // Notify stakeholders that all required roles approved
+      try {
+        const { dispatchNotification } = await import('../services/notificationService.js');
+        await dispatchNotification({
+          recipientRole: 'ML_LEAD',
+          excludeUserId: req.user?._id,
+          title: `Model approved for production: ${model.name} ${version.version}`,
+          message: `All required stakeholders have approved ${model.name} (${version.version}). The version is now authorized for production deployment.`,
+          type: 'APPROVAL_COMPLETED',
+          severity: 'INFO',
+          targetUrl: `/app/models/${model._id}`,
+          modelId: model._id,
+          versionId: version._id,
+          idempotencyKey: `fully_approved_${version._id}`,
+          actor: approverName
+        });
+      } catch (notifErr) {
+        console.warn('[Notification] Full approval notification warning:', notifErr.message);
+      }
     } else {
       version.approvalStatus = 'PENDING_APPROVAL';
       version.lifecycleStatus = 'PENDING_APPROVAL';
       await version.save();
+
+      // Check stage-gate progression and notify the appropriate next stakeholder
+      try {
+        const { dispatchNotification } = await import('../services/notificationService.js');
+
+        // 1. If ML Lead just approved and Governance Officer review is next:
+        if (role === 'ML_LEAD' && requiredRoles.includes('GOVERNANCE_OFFICER') && !approvedRoles.includes('GOVERNANCE_OFFICER')) {
+          await dispatchNotification({
+            recipientRole: 'GOVERNANCE_OFFICER',
+            excludeUserId: req.user?._id,
+            title: 'Governance review requested',
+            message: `ML Lead approved ${model.name} ${version.version}. Your review is next.`,
+            type: 'APPROVAL_REQUEST',
+            severity: 'INFO',
+            targetUrl: '/app/approvals',
+            modelId: model._id,
+            versionId: version._id,
+            idempotencyKey: `gov_review_requested_${version._id}`,
+            actor: approverName
+          });
+        }
+
+        // 2. If all prerequisites are satisfied, notify Executive Approver that sign-off is required:
+        const prerequisitesComplete = requiredRoles
+          .filter(r => r !== 'EXECUTIVE_APPROVER')
+          .every(r => approvedRoles.includes(r));
+
+        if (prerequisitesComplete && requiredRoles.includes('EXECUTIVE_APPROVER') && !approvedRoles.includes('EXECUTIVE_APPROVER')) {
+          await dispatchNotification({
+            recipientRole: 'EXECUTIVE_APPROVER',
+            excludeUserId: req.user?._id,
+            title: 'Executive sign-off required',
+            message: `All technical and governance prerequisite sign-offs are complete for ${model.name} ${version.version}. Executive sign-off is now required.`,
+            type: 'APPROVAL_REQUEST',
+            severity: 'WARNING',
+            targetUrl: '/app/approvals',
+            modelId: model._id,
+            versionId: version._id,
+            idempotencyKey: `exec_signoff_required_${version._id}`,
+            actor: approverName
+          });
+        }
+      } catch (notifErr) {
+        console.warn('[Notification] Stage-gate progression notification warning:', notifErr.message);
+      }
     }
 
     res.json({

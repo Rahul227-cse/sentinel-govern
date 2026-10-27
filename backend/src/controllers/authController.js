@@ -155,6 +155,24 @@ export async function googleAuth(req, res) {
         entityId: user._id.toString(),
         payload: { email, name, role: initialRole, status: initialStatus, verificationStatus: initialVerification, isBootstrapAdmin, authProvider: 'GOOGLE' }
       });
+
+      if (!isBootstrapAdmin && initialVerification === 'PENDING') {
+        try {
+          const { dispatchNotification } = await import('../services/notificationService.js');
+          await dispatchNotification({
+            recipientRole: 'PLATFORM_ADMIN',
+            excludeUserId: user._id,
+            title: 'New user registration awaiting review',
+            message: `User "${user.name}" (${user.email}) has signed up via Google and requires verification.`,
+            type: 'USER_REGISTRATION',
+            severity: 'WARNING',
+            targetUrl: '/admin/users',
+            actor: user.name || user.email
+          });
+        } catch (notifErr) {
+          console.warn('[Notification] Registration alert warning:', notifErr.message);
+        }
+      }
     } else {
       if (user.status === 'SUSPENDED') {
         return res.status(403).json({
@@ -298,6 +316,25 @@ export async function nativeSignup(req, res) {
       entityId: user._id.toString(),
       payload: { email: normalizedEmail, name: name.trim(), role: initialRole, status: initialStatus, verificationStatus: initialVerification, authProvider: 'EMAIL' }
     });
+
+    // Notify Platform Admins about new user registration requiring review
+    if (!isBootstrapAdmin && initialVerification === 'PENDING') {
+      try {
+        const { dispatchNotification } = await import('../services/notificationService.js');
+        await dispatchNotification({
+          recipientRole: 'PLATFORM_ADMIN',
+          excludeUserId: user._id,
+          title: 'New user registration awaiting review',
+          message: `User "${user.name}" (${user.email}) has registered and requires account verification.`,
+          type: 'USER_REGISTRATION',
+          severity: 'WARNING',
+          targetUrl: '/admin/users',
+          actor: user.name || user.email
+        });
+      } catch (notifErr) {
+        console.warn('[Notification] Registration alert warning:', notifErr.message);
+      }
+    }
 
     // Issue access token
     const token = generateAegisToken(user);
@@ -762,6 +799,208 @@ export async function getCurrentUser(req, res) {
       user: buildUserResponse(user)
     });
   } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+// ─── Profile & Identity Updates ──────────────────────────────────────────────
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * PATCH /api/auth/profile
+ * Updates the authenticated user's own display name and/or email address.
+ * Strictly enforces an allowlist: ignores/rejects attempts to modify role, status,
+ * permissions, presence, or other privileged account fields.
+ */
+export async function updateUserProfile(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const { name, email } = req.body;
+
+    if (!name && !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one field (name or email) must be provided for update.'
+      });
+    }
+
+    // Name validation
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 80) {
+        return res.status(400).json({
+          success: false,
+          error: 'Display name must be between 2 and 80 characters.'
+        });
+      }
+    }
+
+    // Email validation
+    let cleanEmail = null;
+    if (email !== undefined) {
+      if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim().toLowerCase())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Please enter a valid email address.'
+        });
+      }
+      cleanEmail = email.trim().toLowerCase();
+
+      // Check uniqueness against other accounts
+      const existing = await User.findOne({
+        email: cleanEmail,
+        _id: { $ne: userId }
+      });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          error: 'Email address is already in use by another account.'
+        });
+      }
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const previousName = user.name;
+    const previousEmail = user.email;
+
+    if (name !== undefined) {
+      user.name = name.trim();
+    }
+    if (cleanEmail && cleanEmail !== user.email) {
+      user.email = cleanEmail;
+    }
+
+    await user.save();
+
+    await recordAuditEvent({
+      actor: user.email,
+      role: user.role,
+      action: 'USER_PROFILE_UPDATED',
+      entityType: 'User',
+      entityId: user._id,
+      payload: {
+        userId: String(user._id),
+        previousName,
+        newName: user.name,
+        previousEmail,
+        newEmail: user.email
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: buildUserResponse(user)
+    });
+  } catch (error) {
+    console.error('[Update Profile Error]', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+/**
+ * POST /api/auth/change-password
+ * Securely updates the password for native authentication accounts.
+ * Validates current password, password strength, and invalidates other sessions.
+ */
+export async function changePassword(req, res) {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const user = await User.findById(userId).select('+passwordHash +refreshTokens');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Check if account has native credentials
+    if (!user.passwordHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'This account authenticates via an external identity provider and does not use a local password.'
+      });
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current password is required.'
+      });
+    }
+
+    const isMatch = await comparePassword(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current password is incorrect.'
+      });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password is required.'
+      });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password and confirmation do not match.'
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password must be different from your current password.'
+      });
+    }
+
+    const strength = validatePasswordStrength(newPassword);
+    if (!strength.valid) {
+      return res.status(400).json({
+        success: false,
+        error: strength.message
+      });
+    }
+
+    user.passwordHash = await hashPassword(newPassword);
+    // Invalidate other refresh tokens following session security policy
+    await revokeAllRefreshTokens(user);
+    await user.save();
+
+    await recordAuditEvent({
+      actor: user.email,
+      role: user.role,
+      action: 'USER_PASSWORD_CHANGED',
+      entityType: 'User',
+      entityId: user._id,
+      payload: {
+        userId: String(user._id),
+        email: user.email,
+        sessionsInvalidated: true
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password changed successfully. Other active sessions have been invalidated.'
+    });
+  } catch (error) {
+    console.error('[Change Password Error]', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }

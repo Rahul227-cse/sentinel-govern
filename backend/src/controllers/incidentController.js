@@ -1,6 +1,11 @@
 import { Incident } from '../models/Incident.js';
 import { executeRollback } from '../services/incidentService.js';
 import { recordAuditEvent } from '../services/auditEngine.js';
+import { 
+  getUserNotifications, 
+  markNotificationAsRead, 
+  markAllNotificationsAsRead 
+} from '../services/notificationService.js';
 
 export async function getIncidents(req, res) {
   try {
@@ -78,6 +83,26 @@ export async function updateIncidentStatus(req, res) {
       }
     });
 
+    if (['MITIGATED', 'CLOSED'].includes(status)) {
+      try {
+        const { dispatchNotification } = await import('../services/notificationService.js');
+        await dispatchNotification({
+          recipientRole: 'ML_LEAD',
+          excludeUserId: req.user?._id,
+          title: `Incident ${incident.incidentNumber} ${status.toLowerCase()}`,
+          message: `Incident ${incident.incidentNumber} for "${incident.title}" has been marked as ${status} by ${actor}.`,
+          type: 'SYSTEM',
+          severity: 'INFO',
+          targetUrl: '/app/incidents',
+          incidentId: incident._id,
+          idempotencyKey: `incident_mitigated_${incident._id}_${status}`,
+          actor
+        });
+      } catch (notifErr) {
+        console.warn('[Notification] Incident status update notification warning:', notifErr.message);
+      }
+    }
+
 
     res.json({ success: true, data: incident });
   } catch (error) {
@@ -91,11 +116,25 @@ export async function rollbackModel(req, res) {
       incidentId,
       modelId,
       targetVersionId,
-      rationale = 'Governance Incident Rollback'
+      rationale
     } = req.body;
 
     const actor = req.user ? (req.user.name || req.user.email) : (req.body.actor || 'ML Lead');
     const role = req.user ? req.user.role : (req.body.role || 'ML_LEAD');
+
+    if (role !== 'ML_LEAD' && role !== 'PLATFORM_ADMIN') {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: Only ML Lead or Platform Admin can execute a model rollback.'
+      });
+    }
+
+    if (!rationale || typeof rationale !== 'string' || !rationale.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rollback rationale is required and cannot be empty.'
+      });
+    }
 
     if (!modelId || !targetVersionId) {
       return res.status(400).json({
@@ -110,7 +149,7 @@ export async function rollbackModel(req, res) {
       targetVersionId,
       actor,
       role,
-      rationale
+      rationale: rationale.trim()
     });
 
     res.json({ success: true, data: result });
@@ -121,26 +160,47 @@ export async function rollbackModel(req, res) {
 
 export async function getNotifications(req, res) {
   try {
-    const role = req.user ? req.user.role : req.query.role;
-    const filter = {};
-    if (role) {
-      filter.$or = [{ recipientRole: role }, { recipientRole: 'ALL' }];
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
     }
-    const { Notification } = await import('../models/Notification.js');
-    const notifs = await Notification.find(filter).sort({ createdAt: -1 }).limit(30);
-    res.json({ success: true, count: notifs.length, data: notifs });
+    const filter = req.query.filter || 'all';
+    const limit = req.query.limit || 40;
+    const result = await getUserNotifications(req.user, { filter, limit });
+    res.json({
+      success: true,
+      count: result.totalCount,
+      unreadCount: result.unreadCount,
+      data: result.notifications
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ success: false, error: error.message });
   }
 }
 
 export async function markNotificationRead(req, res) {
   try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
     const { id } = req.params;
-    const { Notification } = await import('../models/Notification.js');
-    const notif = await Notification.findByIdAndUpdate(id, { read: true }, { new: true });
+    const notif = await markNotificationAsRead(id, req.user);
     res.json({ success: true, data: notif });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ success: false, error: error.message });
+  }
+}
+
+export async function markAllNotificationsRead(req, res) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const result = await markAllNotificationsAsRead(req.user);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ success: false, error: error.message });
   }
 }

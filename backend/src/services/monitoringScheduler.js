@@ -15,7 +15,8 @@ import {
   checkWorkloadHealth,
   generateWorkloadSyntheticInputs,
   scoreWorkloadBatch,
-  ensureGovernedWorkloadModels
+  ensureGovernedWorkloadModels,
+  resolveWorkloadForModel
 } from './workloadService.js';
 import { ingestRuntimeTelemetryBatch } from './runtimeMonitoringService.js';
 import { recordAuditEvent } from './auditEngine.js';
@@ -135,6 +136,47 @@ class MonitoringScheduler {
     this._scheduleAll();
     console.log(`[Scheduler] Monitoring resumed by ${actor}.`);
     return this.getState();
+  }
+
+  /**
+   * Pauses automatic monitoring for a specific model version.
+   */
+  async pauseVersion(modelId, versionId, actor = 'ML Lead') {
+    try {
+      const { Monitoring } = await import('../models/Monitoring.js');
+      await Monitoring.updateMany(
+        { modelId, versionId },
+        { $set: { monitoringStatus: 'PAUSED' } }
+      );
+      console.log(`[Scheduler] Monitoring paused for version ${versionId} of model ${modelId} by ${actor}.`);
+    } catch (err) {
+      console.warn(`[Scheduler] Failed to pause version monitoring: ${err.message}`);
+    }
+  }
+
+  /**
+   * Resumes automatic monitoring for a specific model version.
+   */
+  async resumeVersion(modelId, versionId, actor = 'ML Lead') {
+    try {
+      const { Monitoring } = await import('../models/Monitoring.js');
+      const existing = await Monitoring.findOne({ modelId, versionId });
+      if (existing) {
+        existing.monitoringStatus = 'ACTIVE';
+        await existing.save();
+      } else {
+        await Monitoring.create({
+          modelId,
+          versionId,
+          primaryOwner: actor,
+          monitoringStatus: 'ACTIVE',
+          healthStatus: 'HEALTHY'
+        });
+      }
+      console.log(`[Scheduler] Monitoring resumed for version ${versionId} of model ${modelId} by ${actor}.`);
+    } catch (err) {
+      console.warn(`[Scheduler] Failed to resume version monitoring: ${err.message}`);
+    }
   }
 
   /**
@@ -267,7 +309,11 @@ class MonitoringScheduler {
 
       // Generate controlled synthetic baseline requests for user-configured demo mode
       const inputs = generateWorkloadSyntheticInputs(workloadId, { scenario: 'BASELINE', count: this.batchSize });
-      const scoredRecords = await scoreWorkloadBatch(workloadId, inputs);
+      const scoredRecords = await scoreWorkloadBatch(workloadId, inputs, {
+        modelId: targetBinding.modelId,
+        versionId: targetBinding.versionId,
+        allowDraft: false
+      });
 
       // Ingest through Evidently and Sentinel persistence
       const result = await ingestRuntimeTelemetryBatch({
@@ -321,33 +367,84 @@ class MonitoringScheduler {
   }
 
   /**
-   * Triggers an immediate ad-hoc evaluation for a workload (e.g. from UI trigger button).
+   * Triggers an immediate ad-hoc evaluation for a workload or specific governed model.
    */
-  async triggerBatch(workloadId, { scenario = 'BASELINE', count = 25, actor = 'ML Lead' } = {}) {
-    const state = this.workloadStates[workloadId];
+  async triggerBatch(workloadId, { scenario = 'BASELINE', count = 25, actor = 'ML Lead', modelId = null, versionId = null } = {}) {
+    let targetWorkloadId = workloadId;
+    if (!targetWorkloadId && modelId) {
+      try {
+        const { Model } = await import('../models/Model.js');
+        const m = await Model.findById(modelId);
+        targetWorkloadId = resolveWorkloadForModel(m);
+      } catch {
+        targetWorkloadId = WORKLOAD_IDS.FRAUD;
+      }
+    }
+    targetWorkloadId = targetWorkloadId || WORKLOAD_IDS.FRAUD;
+
+    if (!WORKLOAD_DEFINITIONS[targetWorkloadId] && !modelId) {
+      throw new Error(`Unknown workload ID: ${targetWorkloadId}`);
+    }
+
+    let state = this.workloadStates[targetWorkloadId];
     if (!state) {
-      throw new Error(`Unknown workload ID: ${workloadId}`);
+      this.workloadStates[targetWorkloadId] = {
+        workloadId: targetWorkloadId,
+        name: targetWorkloadId,
+        intervalMs: this.hostedIntervalMs,
+        lastRunAt: null,
+        nextRunAt: null,
+        lastStatus: 'IDLE',
+        lastError: null,
+        isRunning: false,
+        consecutiveFailures: 0,
+        successfulRuns: 0,
+        totalRuns: 0
+      };
+      state = this.workloadStates[targetWorkloadId];
     }
 
     if (state.isRunning) {
-      throw new Error(`Workload ${workloadId} monitoring execution is currently in progress. Please wait.`);
+      throw new Error(`Workload ${targetWorkloadId} monitoring execution is currently in progress. Please wait.`);
     }
 
     state.isRunning = true;
     try {
-      const modelsMap = await ensureGovernedWorkloadModels();
-      const targetBinding = modelsMap[workloadId];
-      if (!targetBinding || !targetBinding.modelId || !targetBinding.versionId) {
-        throw new Error(`No governed model registered in database for workload '${workloadId}'. Please register and approve a model before running evaluation.`);
+      let effectiveModelId = modelId;
+      let effectiveVersionId = versionId;
+
+      if (!effectiveModelId || !effectiveVersionId) {
+        const modelsMap = await ensureGovernedWorkloadModels();
+        const targetBinding = modelsMap[targetWorkloadId];
+        effectiveModelId = effectiveModelId || targetBinding?.modelId;
+        effectiveVersionId = effectiveVersionId || targetBinding?.versionId;
       }
 
-      const inputs = generateWorkloadSyntheticInputs(workloadId, { scenario, count });
-      const scoredRecords = await scoreWorkloadBatch(workloadId, inputs);
+      if (!effectiveModelId || !effectiveVersionId) {
+        throw new Error(`No governed model registered in database for workload '${targetWorkloadId}'. Please register and approve a model before running evaluation.`);
+      }
+
+      let refRecords = null;
+      try {
+        const { retrieveReferenceDatasetRecords } = await import('./referenceDatasetService.js');
+        const { ModelVersion } = await import('../models/ModelVersion.js');
+        const versionDoc = await ModelVersion.findById(effectiveVersionId);
+        refRecords = await retrieveReferenceDatasetRecords(versionDoc, null);
+      } catch (err) {
+        // Fallback gracefully
+      }
+
+      const inputs = generateWorkloadSyntheticInputs(targetWorkloadId, { scenario, count, referenceRecords: refRecords });
+      const scoredRecords = await scoreWorkloadBatch(targetWorkloadId, inputs, {
+        modelId: effectiveModelId,
+        versionId: effectiveVersionId,
+        allowDraft: false
+      });
 
       const result = await ingestRuntimeTelemetryBatch({
-        modelId: targetBinding.modelId,
-        versionId: targetBinding.versionId,
-        workloadId,
+        modelId: effectiveModelId,
+        versionId: effectiveVersionId,
+        workloadId: targetWorkloadId,
         runtimeRecords: scoredRecords,
         isSynthetic: true,
         actor

@@ -21,11 +21,39 @@ const modelVersionSchema = new mongoose.Schema({
     dateRange: { type: String, default: '2025-01 to 2025-12' },
     dataHash: { type: String, default: 'sha256-d7a8f3b2...' }
   },
+  referenceDataset: {
+    filename: { type: String, default: null },
+    rowCount: { type: Number, default: null },
+    featureColumns: [{ type: String }],
+    targetColumn: { type: String, default: null },
+    protectedAttributes: [{ type: String }],
+    dataHash: { type: String, default: null },
+    uploadedAt: { type: Date, default: null },
+    schemaStats: { type: mongoose.Schema.Types.Mixed, default: null },
+    gridFsId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    storagePath: { type: String, default: null }
+  },
   lifecycleStatus: { 
     type: String, 
-    enum: ['DRAFT', 'UNDER_REVIEW', 'EVALUATION', 'PENDING_APPROVAL', 'APPROVED', 'IN_PRODUCTION', 'DEPRECATED'],
+    enum: ['DRAFT', 'UNDER_REVIEW', 'EVALUATION', 'PENDING_APPROVAL', 'APPROVED', 'IN_PRODUCTION', 'RETIRED', 'DEPRECATED'],
     default: 'DRAFT',
     required: true 
+  },
+  apiConfig: {
+    endpointUrl: { type: String, default: null },
+    healthEndpoint: { type: String, default: null },
+    predictEndpoint: { type: String, default: null },
+    method: { type: String, enum: ['POST', 'GET', null], default: null },
+    authType: { type: String, enum: ['NONE', 'BEARER', 'API_KEY', 'CUSTOM_HEADER', null], default: null },
+    authHeaderName: { type: String, default: null },
+    authHeaderValue: { type: String, default: null, select: false },
+    requestMapping: { type: mongoose.Schema.Types.Mixed, default: null },
+    responseMapping: {
+      predictionField: { type: String, default: null },
+      latencyField: { type: String, default: null }
+    },
+    timeoutMs: { type: Number, default: null },
+    maxRetries: { type: Number, default: null }
   },
   evaluationStatus: { 
     type: String, 
@@ -55,6 +83,8 @@ const modelVersionSchema = new mongoose.Schema({
   latestPolicyEvaluation: {
     passed: { type: Boolean, default: false },
     overallDecision: { type: String, default: 'NOT_EVALUATED' },
+    reasons: [{ type: String }],
+    noPolicyAssigned: { type: Boolean, default: false },
     gateBreakdown: { type: mongoose.Schema.Types.Mixed, default: {} },
     evaluatedAt: { type: Date }
   },

@@ -1,5 +1,6 @@
 import { User } from '../models/User.js';
 import { recordAuditEvent } from '../services/auditEngine.js';
+import { dispatchNotification } from '../services/notificationService.js';
 
 /**
  * GET /api/admin/users
@@ -93,6 +94,21 @@ export async function updateUserRole(req, res) {
       }
     });
 
+    // Notify affected user
+    try {
+      await dispatchNotification({
+        recipientUserId: targetUser._id,
+        title: 'Governance role updated',
+        message: `Your governance role has been updated from ${previousRole} to ${role} by ${req.user.name || req.user.email}.`,
+        type: 'USER_STATUS_CHANGE',
+        severity: 'INFO',
+        targetUrl: '/app/profile',
+        actor: req.user
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] Role update notification warning:', notifErr.message);
+    }
+
     return res.json({
       success: true,
       message: `Role updated to ${role} successfully.`,
@@ -152,6 +168,23 @@ export async function updateUserStatus(req, res) {
       }
     });
 
+    // Notify affected user
+    try {
+      await dispatchNotification({
+        recipientUserId: targetUser._id,
+        title: status === 'SUSPENDED' ? 'Account suspended' : 'Account status updated',
+        message: status === 'SUSPENDED'
+          ? 'Your Sentinel Govern account has been suspended by platform administration. Access is temporarily restricted.'
+          : `Your account lifecycle status has been updated to ${status}.`,
+        type: 'USER_STATUS_CHANGE',
+        severity: status === 'SUSPENDED' ? 'CRITICAL' : 'INFO',
+        targetUrl: '/app/profile',
+        actor: req.user
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] Status update notification warning:', notifErr.message);
+    }
+
     return res.json({
       success: true,
       message: `User status changed from ${previousStatus} to ${status}.`,
@@ -193,6 +226,21 @@ export async function verifyUser(req, res) {
         verifiedBy: req.user.email
       }
     });
+
+    // Notify verified user
+    try {
+      await dispatchNotification({
+        recipientUserId: targetUser._id,
+        title: 'Account verified',
+        message: `Your Sentinel Govern account has been verified by ${req.user.name || req.user.email}. Full governance access is now active.`,
+        type: 'USER_STATUS_CHANGE',
+        severity: 'INFO',
+        targetUrl: '/app',
+        actor: req.user
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] User verification notification warning:', notifErr.message);
+    }
 
     return res.json({
       success: true,
@@ -244,6 +292,21 @@ export async function blockUser(req, res) {
         blockedBy: req.user.email
       }
     });
+
+    // Notify blocked/suspended user
+    try {
+      await dispatchNotification({
+        recipientUserId: targetUser._id,
+        title: 'Account suspended',
+        message: `Your Sentinel Govern account has been suspended by platform administration. Access is temporarily restricted.`,
+        type: 'USER_STATUS_CHANGE',
+        severity: 'CRITICAL',
+        targetUrl: '/app/profile',
+        actor: req.user
+      });
+    } catch (notifErr) {
+      console.warn('[Notification] User blocked notification warning:', notifErr.message);
+    }
 
     return res.json({
       success: true,

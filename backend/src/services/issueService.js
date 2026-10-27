@@ -297,9 +297,8 @@ export async function escalateIssueToIncident({
     policyStatus: 'PASSED',
     $or: [
       { approvalStatus: 'APPROVED' },
-      { deploymentStatus: 'IN_PRODUCTION' },
-      { lifecycleStatus: 'APPROVED' },
-      { lifecycleStatus: 'DEPRECATED' }
+      { deploymentStatus: { $in: ['IN_PRODUCTION', 'RETIRED'] } },
+      { lifecycleStatus: { $in: ['APPROVED', 'RETIRED', 'DEPRECATED'] } }
     ]
   }).sort({ createdAt: -1 });
 
@@ -371,6 +370,28 @@ export async function escalateIssueToIncident({
       recommendedRollbackVersion: previousApprovedVersion?.version || 'None'
     }
   });
+
+  // Notify ML Lead about escalated issue to incident
+  try {
+    const { dispatchNotification } = await import('./notificationService.js');
+    await dispatchNotification({
+      recipientRole: 'ML_LEAD',
+      excludeUserId: user._id,
+      title: `Issue escalated to incident ${incident.incidentNumber}`,
+      message: `Issue report ${issue.reportNumber} has been escalated to Incident ${incident.incidentNumber} by ${actor}.`,
+      type: 'ISSUE_ESCALATED',
+      severity: 'WARNING',
+      targetUrl: '/app/incidents',
+      modelId: model._id,
+      versionId: version._id,
+      incidentId: incident._id,
+      issueId: issue._id,
+      idempotencyKey: `issue_escalated_${issue._id}_${incident._id}`,
+      actor
+    });
+  } catch (notifErr) {
+    console.warn('[Notification] Issue escalation notification warning:', notifErr.message);
+  }
 
 
   return { issue, incident };

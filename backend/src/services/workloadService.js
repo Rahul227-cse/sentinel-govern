@@ -10,9 +10,11 @@
  * "The AI model does the AI work. Sentinel Govern governs the AI model."
  */
 
+import mongoose from 'mongoose';
 import { Model } from '../models/Model.js';
 import { ModelVersion } from '../models/ModelVersion.js';
 import { Policy } from '../models/Policy.js';
+import { executeModelInference, checkModelEndpointHealth } from './inferenceService.js';
 
 export const WORKLOAD_IDS = {
   FRAUD: 'fraud-detection',
@@ -124,6 +126,27 @@ export const WORKLOAD_DEFINITIONS = {
  * Checks health of a single workload.
  */
 export async function checkWorkloadHealth(workloadId) {
+  if (typeof workloadId === 'string' && mongoose.Types.ObjectId.isValid(workloadId)) {
+    return await checkModelEndpointHealth(workloadId);
+  }
+
+  // If a governed model exists for this workload with an active endpointUrl, probe its endpoint dynamically
+  try {
+    const modelsMap = await findGovernedWorkloadModels();
+    const binding = modelsMap?.[workloadId];
+    if (binding?.model?.apiConfig?.endpointUrl?.trim()) {
+      const probeRes = await checkModelEndpointHealth(binding.modelId);
+      return {
+        ...probeRes,
+        workloadId,
+        name: binding.model.name,
+        hasReferenceData: Boolean(binding.version?.referenceDataset?.filename || binding.version?.referenceDataset?.storagePath)
+      };
+    }
+  } catch {
+    // Fall back to definition check
+  }
+
   const config = WORKLOAD_DEFINITIONS[workloadId];
   if (!config) {
     return { status: 'UNAVAILABLE', error: `Unknown workload ID: ${workloadId}` };
@@ -216,37 +239,16 @@ export async function checkWorkloadHealth(workloadId) {
  */
 export async function checkAllWorkloadsHealth() {
   const fraud = await checkWorkloadHealth(WORKLOAD_IDS.FRAUD);
-
-  const creditRisk = {
-    workloadId: WORKLOAD_IDS.CREDIT_RISK,
-    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CREDIT_RISK].name,
-    status: 'INACTIVE',
-    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CREDIT_RISK].primaryUrl,
-    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
-  };
-
-  const insurance = {
-    workloadId: WORKLOAD_IDS.INSURANCE,
-    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.INSURANCE].name,
-    status: 'INACTIVE',
-    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.INSURANCE].primaryUrl,
-    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
-  };
-
-  const churn = {
-    workloadId: WORKLOAD_IDS.CHURN,
-    name: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CHURN].name,
-    status: 'INACTIVE',
-    url: WORKLOAD_DEFINITIONS[WORKLOAD_IDS.CHURN].primaryUrl,
-    message: 'Workload deferred for interview walkthrough (Fraud AI active).'
-  };
+  const creditRisk = await checkWorkloadHealth(WORKLOAD_IDS.CREDIT_RISK);
+  const insurance = await checkWorkloadHealth(WORKLOAD_IDS.INSURANCE);
+  const churn = await checkWorkloadHealth(WORKLOAD_IDS.CHURN);
 
   return {
     fraud,
     creditRisk,
     insurance,
     churn,
-    workloads: [fraud] // Walkthrough exposes only the active local fraud workload
+    workloads: [fraud, creditRisk, insurance, churn]
   };
 }
 
@@ -348,6 +350,9 @@ export async function scoreInsuranceIndividual(individualPayload) {
     age: individualPayload.age,
     bmi: individualPayload.bmi,
     children: individualPayload.children,
+    sex: individualPayload.sex,
+    smoker: individualPayload.smoker,
+    region: individualPayload.region,
     latency_ms: latency
   };
 }
@@ -402,9 +407,48 @@ export async function scoreChurnCustomer(customerPayload) {
 /**
  * Generates synthetic walkthrough test inputs for a workload.
  */
-export function generateWorkloadSyntheticInputs(workloadId, { scenario = 'BASELINE', count = 25 } = {}) {
+export function generateWorkloadSyntheticInputs(workloadId, { scenario = 'BASELINE', count = 25, referenceRecords = null } = {}) {
   const safeCount = Math.max(5, Math.min(Number(count) || 25, 50));
   const inputs = [];
+
+  if (Array.isArray(referenceRecords) && referenceRecords.length > 0) {
+    for (let i = 0; i < safeCount; i++) {
+      const base = referenceRecords[i % referenceRecords.length];
+      const isAnomalous = scenario === 'DRIFTED' || (scenario === 'MIXED' && i % 3 === 0);
+      const record = { ...base };
+      delete record.predicted;
+      delete record.probability;
+      delete record.decision;
+      delete record.prediction;
+      delete record.predicted_charge;
+      delete record.target;
+      delete record._id;
+
+      if (isAnomalous) {
+        for (const [k, v] of Object.entries(record)) {
+          if (typeof v === 'number') {
+            if (/income/i.test(k)) record[k] = Math.round(v * 0.35);
+            else if (/credit|debt/i.test(k)) record[k] = Math.round(v * 2.2);
+            else if (/birth/i.test(k)) record[k] = typeof v === 'number' && v < 0 ? Math.round(v * 0.55) : -8000;
+            else if (/age/i.test(k)) record[k] = typeof v === 'number' ? Math.round(v * 0.6) : 22;
+            else if (/charge|amount/i.test(k)) record[k] = Number((v * 2.5).toFixed(2));
+            else if (/ext_source/i.test(k)) record[k] = Number(Math.max(0.05, v * 0.3).toFixed(2));
+            else record[k] = Math.round(v * 1.8);
+          }
+        }
+      } else {
+        const jitter = 1 + (Math.random() * 0.04 - 0.02);
+        for (const [k, v] of Object.entries(record)) {
+          if (typeof v === 'number') {
+            record[k] = Number.isInteger(v) ? Math.round(v * jitter) : Number((v * jitter).toFixed(4));
+          }
+        }
+      }
+      record.isSyntheticWalkthroughTraffic = true;
+      inputs.push(record);
+    }
+    return inputs;
+  }
 
   if (workloadId === WORKLOAD_IDS.FRAUD) {
     const baseTime = Date.now();
@@ -446,52 +490,170 @@ export function generateWorkloadSyntheticInputs(workloadId, { scenario = 'BASELI
       }
     }
   } else if (workloadId === WORKLOAD_IDS.CREDIT_RISK) {
+    const CREDIT_LENS_REFERENCE_PROFILES = [
+      { amt_income: 162000, amt_credit: 640000, amt_annuity: 31500, age: 36, gender: 'Female', emp_years: 3.5, region_rating: 2, cnt_children: 1, ext_source_1: 0.42, ext_source_2: 0.48, ext_source_3: 0.43, bureau_active: 2, bureau_dpd: 0, bureau_debt: 165000, prev_approval: 0.58, prev_refused: 1, prev_count: 4 },
+      { amt_income: 120000, amt_credit: 420000, amt_annuity: 22000, age: 29, gender: 'Male', emp_years: 2.0, region_rating: 3, cnt_children: 0, ext_source_1: 0.61, ext_source_2: 0.57, ext_source_3: 0.52, bureau_active: 1, bureau_dpd: 1, bureau_debt: 85000, prev_approval: 0.72, prev_refused: 0, prev_count: 3 },
+      { amt_income: 210000, amt_credit: 780000, amt_annuity: 39000, age: 45, gender: 'Male', emp_years: 8.0, region_rating: 1, cnt_children: 2, ext_source_1: 0.75, ext_source_2: 0.69, ext_source_3: 0.64, bureau_active: 3, bureau_dpd: 0, bureau_debt: 120000, prev_approval: 0.81, prev_refused: 0, prev_count: 5 },
+      { amt_income: 90000, amt_credit: 300000, amt_annuity: 18000, age: 24, gender: 'Female', emp_years: 1.0, region_rating: 3, cnt_children: 0, ext_source_1: 0.28, ext_source_2: 0.34, ext_source_3: 0.31, bureau_active: 0, bureau_dpd: 4, bureau_debt: 45000, prev_approval: 0.35, prev_refused: 2, prev_count: 2 },
+      { amt_income: 175000, amt_credit: 550000, amt_annuity: 28000, age: 38, gender: 'Female', emp_years: 6.0, region_rating: 2, cnt_children: 1, ext_source_1: 0.54, ext_source_2: 0.62, ext_source_3: 0.59, bureau_active: 2, bureau_dpd: 0, bureau_debt: 100000, prev_approval: 0.67, prev_refused: 1, prev_count: 4 },
+      { amt_income: 80000, amt_credit: 260000, amt_annuity: 16000, age: 31, gender: 'Male', emp_years: 4.0, region_rating: 2, cnt_children: 2, ext_source_1: 0.19, ext_source_2: 0.27, ext_source_3: 0.22, bureau_active: 1, bureau_dpd: 5, bureau_debt: 65000, prev_approval: 0.42, prev_refused: 2, prev_count: 3 },
+      { amt_income: 260000, amt_credit: 950000, amt_annuity: 48000, age: 52, gender: 'Male', emp_years: 12.0, region_rating: 1, cnt_children: 0, ext_source_1: 0.88, ext_source_2: 0.83, ext_source_3: 0.79, bureau_active: 4, bureau_dpd: 0, bureau_debt: 140000, prev_approval: 0.91, prev_refused: 0, prev_count: 6 },
+      { amt_income: 135000, amt_credit: 470000, amt_annuity: 24000, age: 33, gender: 'Female', emp_years: 5.0, region_rating: 2, cnt_children: 1, ext_source_1: 0.47, ext_source_2: 0.51, ext_source_3: 0.45, bureau_active: 2, bureau_dpd: 1, bureau_debt: 90000, prev_approval: 0.60, prev_refused: 1, prev_count: 4 },
+      { amt_income: 105000, amt_credit: 350000, amt_annuity: 20000, age: 27, gender: 'Male', emp_years: 2.5, region_rating: 3, cnt_children: 0, ext_source_1: 0.22, ext_source_2: 0.29, ext_source_3: 0.25, bureau_active: 0, bureau_dpd: 3, bureau_debt: 55000, prev_approval: 0.38, prev_refused: 2, prev_count: 2 },
+      { amt_income: 195000, amt_credit: 690000, amt_annuity: 34000, age: 41, gender: 'Male', emp_years: 9.0, region_rating: 2, cnt_children: 2, ext_source_1: 0.69, ext_source_2: 0.73, ext_source_3: 0.67, bureau_active: 3, bureau_dpd: 0, bureau_debt: 110000, prev_approval: 0.76, prev_refused: 0, prev_count: 5 },
+      { amt_income: 145000, amt_credit: 510000, amt_annuity: 26000, age: 35, gender: 'Female', emp_years: 7.0, region_rating: 1, cnt_children: 1, ext_source_1: 0.39, ext_source_2: 0.44, ext_source_3: 0.41, bureau_active: 1, bureau_dpd: 2, bureau_debt: 95000, prev_approval: 0.53, prev_refused: 1, prev_count: 3 },
+      { amt_income: 115000, amt_credit: 380000, amt_annuity: 21000, age: 30, gender: 'Female', emp_years: 3.0, region_rating: 3, cnt_children: 0, ext_source_1: 0.31, ext_source_2: 0.37, ext_source_3: 0.33, bureau_active: 1, bureau_dpd: 4, bureau_debt: 70000, prev_approval: 0.46, prev_refused: 2, prev_count: 3 }
+    ];
+
     for (let i = 0; i < safeCount; i++) {
+      const base = CREDIT_LENS_REFERENCE_PROFILES[i % CREDIT_LENS_REFERENCE_PROFILES.length];
       const isAnomalous = scenario === 'DRIFTED' || (scenario === 'MIXED' && i % 3 === 0);
+
       if (isAnomalous) {
-        // Genuinely shifted population distribution for DRIFTED scenarios
+        // Genuinely shifted population distribution (economic shock / severe risk scenario)
+        const income = Math.round(base.amt_income * 0.45);
+        const credit = Math.round(base.amt_credit * 1.6);
+        const annuity = Math.round(base.amt_annuity * 1.45);
+        const bureauDebt = Math.round(base.bureau_debt * 1.8);
+        const ext1 = Number(Math.max(0.05, base.ext_source_1 * 0.35).toFixed(2));
+        const ext2 = Number(Math.max(0.05, base.ext_source_2 * 0.35).toFixed(2));
+        const ext3 = Number(Math.max(0.05, base.ext_source_3 * 0.35).toFixed(2));
+        const dpd = base.bureau_dpd + 6;
+        const daysBirth = -Math.round(base.age * 365.25);
+
         inputs.push({
-          AMT_INCOME_TOTAL: Math.round(35000 + Math.random() * 45000),
-          AMT_CREDIT: Math.round(650000 + Math.random() * 250000),
-          DAYS_BIRTH: -Math.round(8000 + Math.random() * 2500),
-          AMT_ANNUITY: Math.round(45000 + Math.random() * 15000),
-          DAYS_EMPLOYED: -Math.round(200 + Math.random() * 500),
-          EXT_SOURCE_1: Number((0.15 + Math.random() * 0.15).toFixed(2)),
-          EXT_SOURCE_2: Number((0.15 + Math.random() * 0.15).toFixed(2)),
-          EXT_SOURCE_3: Number((0.15 + Math.random() * 0.15).toFixed(2)),
-          isSyntheticWalkthroughTraffic: true
-        });
-      } else {
-        // Baseline applicant distribution aligned to reference_credit_risk.csv
-        const normApprox = (Math.random() + Math.random() + Math.random() - 1.5);
-        const daysBirth = Math.max(-16460, Math.min(-12080, Math.round(-13980 + normApprox * 1800)));
-        const income = Math.max(205000, Math.min(285000, Math.round(242500 + normApprox * 25000)));
-        const credit = Math.max(335000, Math.min(440000, Math.round(400000 + normApprox * 35000)));
-        inputs.push({
+          amt_income: income,
+          amt_credit: credit,
+          amt_annuity: annuity,
+          age: base.age,
+          gender: base.gender,
+          emp_years: Math.max(0.5, Number((base.emp_years * 0.5).toFixed(1))),
+          region_rating: 3,
+          cnt_children: base.cnt_children,
+          ext_source_1: ext1,
+          ext_source_2: ext2,
+          ext_source_3: ext3,
+          bureau_active: Math.max(0, base.bureau_active - 1),
+          bureau_dpd: dpd,
+          bureau_debt: bureauDebt,
+          prev_approval: Number(Math.max(0.1, base.prev_approval * 0.35).toFixed(2)),
+          prev_refused: base.prev_refused + 2,
+          prev_count: base.prev_count + 1,
+          // Legacy Kaggle aliases for backward compatibility
           AMT_INCOME_TOTAL: income,
           AMT_CREDIT: credit,
           DAYS_BIRTH: daysBirth,
-          AMT_ANNUITY: Math.round(22000 + Math.random() * 8000),
-          DAYS_EMPLOYED: -Math.round(2500 + Math.random() * 3000),
-          EXT_SOURCE_1: Number((0.78 + Math.random() * 0.12).toFixed(2)),
-          EXT_SOURCE_2: Number((0.78 + Math.random() * 0.12).toFixed(2)),
-          EXT_SOURCE_3: Number((0.78 + Math.random() * 0.12).toFixed(2)),
+          AMT_ANNUITY: annuity,
+          DAYS_EMPLOYED: -Math.round(base.emp_years * 365.25 * 0.5),
+          EXT_SOURCE_1: ext1,
+          EXT_SOURCE_2: ext2,
+          EXT_SOURCE_3: ext3,
+          isSyntheticWalkthroughTraffic: true
+        });
+      } else {
+        // Valid in-distribution baseline matching the reference dataset
+        const jitter = 1 + (Math.random() * 0.04 - 0.02);
+        const income = Math.round(base.amt_income * jitter);
+        const credit = Math.round(base.amt_credit * jitter);
+        const annuity = Math.round(base.amt_annuity * jitter);
+        const bureauDebt = Math.round(base.bureau_debt * jitter);
+        const daysBirth = -Math.round(base.age * 365.25);
+
+        inputs.push({
+          amt_income: income,
+          amt_credit: credit,
+          amt_annuity: annuity,
+          age: base.age,
+          gender: base.gender,
+          emp_years: base.emp_years,
+          region_rating: base.region_rating,
+          cnt_children: base.cnt_children,
+          ext_source_1: base.ext_source_1,
+          ext_source_2: base.ext_source_2,
+          ext_source_3: base.ext_source_3,
+          bureau_active: base.bureau_active,
+          bureau_dpd: base.bureau_dpd,
+          bureau_debt: bureauDebt,
+          prev_approval: base.prev_approval,
+          prev_refused: base.prev_refused,
+          prev_count: base.prev_count,
+          // Legacy Kaggle aliases for backward compatibility
+          AMT_INCOME_TOTAL: income,
+          AMT_CREDIT: credit,
+          DAYS_BIRTH: daysBirth,
+          AMT_ANNUITY: annuity,
+          DAYS_EMPLOYED: -Math.round(base.emp_years * 365.25),
+          EXT_SOURCE_1: base.ext_source_1,
+          EXT_SOURCE_2: base.ext_source_2,
+          EXT_SOURCE_3: base.ext_source_3,
           isSyntheticWalkthroughTraffic: true
         });
       }
     }
   } else if (workloadId === WORKLOAD_IDS.INSURANCE) {
-    const regions = ['northeast', 'northwest', 'southeast', 'southwest'];
+    const INSURANCE_REFERENCE_PROFILES = [
+      { age: 29, bmi: 27.8, children: 1, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 335.9, predicted_charge: 5767.05 },
+      { age: 40, bmi: 23.5, children: 0, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 239.4, predicted_charge: 5987.54 },
+      { age: 43, bmi: 22.9, children: 1, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 367.3, predicted_charge: 9062.13 },
+      { age: 28, bmi: 24.3, children: 2, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 383.3, predicted_charge: 6581.27 },
+      { age: 27, bmi: 23.6, children: 2, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 338.9, predicted_charge: 6408.44 },
+      { age: 41, bmi: 23.2, children: 2, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 402.6, predicted_charge: 7847.01 },
+      { age: 41, bmi: 27.3, children: 0, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 253.7, predicted_charge: 5818.41 },
+      { age: 36, bmi: 30.6, children: 1, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 412.2, predicted_charge: 6734.90 },
+      { age: 38, bmi: 24.5, children: 1, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 283.5, predicted_charge: 6977.80 },
+      { age: 45, bmi: 22.0, children: 1, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 256.0, predicted_charge: 8802.26 },
+      { age: 30, bmi: 27.8, children: 2, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 308.1, predicted_charge: 6386.98 },
+      { age: 27, bmi: 22.6, children: 0, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 413.6, predicted_charge: 4547.46 },
+      { age: 33, bmi: 23.2, children: 2, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 319.0, predicted_charge: 7944.81 },
+      { age: 29, bmi: 27.4, children: 2, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 273.4, predicted_charge: 6523.87 },
+      { age: 48, bmi: 25.8, children: 1, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 255.3, predicted_charge: 10550.90 },
+      { age: 41, bmi: 24.5, children: 2, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 314.7, predicted_charge: 8110.19 },
+      { age: 38, bmi: 26.4, children: 1, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 220.3, predicted_charge: 6545.79 },
+      { age: 45, bmi: 25.2, children: 0, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 255.0, predicted_charge: 10106.23 },
+      { age: 27, bmi: 30.9, children: 1, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 397.2, predicted_charge: 5117.57 },
+      { age: 25, bmi: 24.5, children: 0, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 386.2, predicted_charge: 4768.84 },
+      { age: 44, bmi: 23.9, children: 1, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 313.6, predicted_charge: 9342.59 },
+      { age: 45, bmi: 25.1, children: 2, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 296.7, predicted_charge: 10471.41 },
+      { age: 47, bmi: 25.2, children: 2, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 322.9, predicted_charge: 11248.80 },
+      { age: 25, bmi: 27.7, children: 0, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 437.4, predicted_charge: 4312.37 },
+      { age: 27, bmi: 21.2, children: 0, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 340.2, predicted_charge: 4120.73 },
+      { age: 42, bmi: 27.3, children: 0, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 365.5, predicted_charge: 6336.58 },
+      { age: 49, bmi: 24.8, children: 1, sex: 'male', smoker: 'no', region: 'southeast', latency_ms: 309.9, predicted_charge: 11437.31 },
+      { age: 34, bmi: 28.1, children: 1, sex: 'female', smoker: 'no', region: 'southwest', latency_ms: 323.0, predicted_charge: 6644.25 },
+      { age: 46, bmi: 26.1, children: 0, sex: 'male', smoker: 'no', region: 'northeast', latency_ms: 352.4, predicted_charge: 9535.20 },
+      { age: 50, bmi: 27.5, children: 2, sex: 'female', smoker: 'no', region: 'northwest', latency_ms: 326.3, predicted_charge: 11661.34 }
+    ];
+
     for (let i = 0; i < safeCount; i++) {
-      inputs.push({
-        age: 24 + Math.floor(Math.random() * 30),
-        sex: i % 2 === 0 ? 'male' : 'female',
-        bmi: Number((23.0 + Math.random() * 6.5).toFixed(1)),
-        children: Math.floor(Math.random() * 3),
-        smoker: 'no',
-        region: regions[i % 4],
-        isSyntheticWalkthroughTraffic: true
-      });
+      const base = INSURANCE_REFERENCE_PROFILES[i % INSURANCE_REFERENCE_PROFILES.length];
+      const isAnomalous = scenario === 'DRIFTED' || (scenario === 'MIXED' && i % 3 === 0);
+
+      if (isAnomalous) {
+        // Genuinely shifted population distribution (older demographic, elevated BMI, active smokers)
+        const shiftedAge = Math.min(64, base.age + 18);
+        const shiftedBmi = Number((base.bmi * 1.4).toFixed(1));
+        inputs.push({
+          age: shiftedAge,
+          sex: base.sex,
+          bmi: shiftedBmi,
+          children: base.children,
+          smoker: 'yes',
+          region: base.region,
+          isSyntheticWalkthroughTraffic: true
+        });
+      } else {
+        // Valid in-distribution baseline matching the reference dataset
+        const jitter = 1 + (Math.random() * 0.04 - 0.02);
+        inputs.push({
+          age: base.age,
+          sex: base.sex,
+          bmi: Number((base.bmi * jitter).toFixed(1)),
+          children: base.children,
+          smoker: base.smoker,
+          region: base.region,
+          isSyntheticWalkthroughTraffic: true
+        });
+      }
     }
   } else if (workloadId === WORKLOAD_IDS.CHURN) {
     for (let i = 0; i < safeCount; i++) {
@@ -526,10 +688,49 @@ export function generateWorkloadSyntheticInputs(workloadId, { scenario = 'BASELI
 
 /**
  * Scores a batch of transactions/inputs against the real prediction service of the given workload.
+ * Supports direct dynamic model inference via options.modelId or MongoDB ObjectId workloadId.
  */
-export async function scoreWorkloadBatch(workloadId, inputs) {
+export async function scoreWorkloadBatch(workloadId, inputs, options = {}) {
   if (!Array.isArray(inputs) || inputs.length === 0) {
     throw new Error('Inputs batch must be a non-empty array');
+  }
+
+  // 1. Direct Dynamic Model Inference when a Model ID is provided
+  const isDirectModelId = (typeof workloadId === 'string' && mongoose.Types.ObjectId.isValid(workloadId)) || options.modelId;
+  const targetModelId = options.modelId || (isDirectModelId ? workloadId : null);
+
+  if (targetModelId) {
+    const scoredRecords = [];
+    for (const item of inputs) {
+      const res = await executeModelInference({
+        modelId: targetModelId,
+        versionId: options.versionId,
+        inputPayload: item,
+        options: {
+          allowDraft: options.allowDraft ?? false,
+          timeoutMs: options.timeoutMs || 25000
+        }
+      });
+      const rawProb = res.rawResponse?.probability_of_default !== undefined 
+        ? res.rawResponse.probability_of_default 
+        : (res.rawResponse?.probability !== undefined ? res.rawResponse.probability : undefined);
+
+      const applicantObj = (typeof item === 'object' && item !== null && typeof item.applicant === 'object' && item.applicant !== null)
+        ? item.applicant
+        : {};
+
+      scoredRecords.push({
+        ...(typeof item === 'object' && item !== null ? item : {}),
+        ...applicantObj,
+        ...(typeof res.rawResponse === 'object' && res.rawResponse !== null ? res.rawResponse : {}),
+        ...(typeof res.rawResponse?.features === 'object' && res.rawResponse?.features !== null ? res.rawResponse.features : {}),
+        ...(rawProb !== undefined ? { probability_of_default: rawProb, probability: rawProb } : {}),
+        prediction: res.prediction,
+        decision: res.prediction || res.rawResponse?.decision,
+        latency_ms: res.latencyMs
+      });
+    }
+    return scoredRecords;
   }
 
   const scoredRecords = [];
@@ -565,6 +766,9 @@ export async function scoreWorkloadBatch(workloadId, inputs) {
         age: scored.age,
         bmi: scored.bmi,
         children: scored.children,
+        sex: scored.sex,
+        smoker: scored.smoker,
+        region: scored.region,
         latency_ms: scored.latency_ms
       });
     } else if (workloadId === WORKLOAD_IDS.CHURN) {
@@ -579,6 +783,30 @@ export async function scoreWorkloadBatch(workloadId, inputs) {
   }
 
   return scoredRecords;
+}
+
+/**
+ * Resolves the corresponding workload identifier for a governed Model.
+ */
+export function resolveWorkloadForModel(model) {
+  if (!model) return WORKLOAD_IDS.FRAUD;
+  const name = model.name || '';
+  const purpose = model.purpose || '';
+  const description = model.description || '';
+
+  if (/Credit/i.test(name) || /Credit/i.test(purpose) || /Lending/i.test(purpose) || /Credit/i.test(description)) {
+    return WORKLOAD_IDS.CREDIT_RISK;
+  }
+  if (/Insurance/i.test(name) || /Insurance/i.test(purpose) || /Medical/i.test(purpose) || /Insurance/i.test(description)) {
+    return WORKLOAD_IDS.INSURANCE;
+  }
+  if (/Churn/i.test(name) || /Churn/i.test(purpose) || /Retention/i.test(purpose) || /Churn/i.test(description)) {
+    return WORKLOAD_IDS.CHURN;
+  }
+  if (/Fraud/i.test(name) || /Fraud/i.test(purpose) || /Anomaly/i.test(purpose) || /Fraud/i.test(description)) {
+    return WORKLOAD_IDS.FRAUD;
+  }
+  return WORKLOAD_IDS.FRAUD;
 }
 
 /**

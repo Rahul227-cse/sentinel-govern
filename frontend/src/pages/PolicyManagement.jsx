@@ -205,6 +205,10 @@ export default function PolicyManagement() {
     <div className="page-container">
       {/* Page Header */}
       <PageHeader
+        breadcrumbs={[
+          { label: 'Workspace', to: '/app' },
+          { label: 'Policy Management' }
+        ]}
         title="Policy & Governance Rules Management"
         subtitle="Policy Library: statutory compliance frameworks, automated gating thresholds, and multi-model governance assignments."
       >

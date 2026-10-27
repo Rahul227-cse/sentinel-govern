@@ -98,8 +98,8 @@ export default function IncidentManagement() {
     <div className="page-container">
       <PageHeader
         breadcrumbs={[
-          { label: 'Workspace', link: '/app' },
-          { label: 'Incidents' }
+          { label: 'Workspace', to: '/app' },
+          { label: 'Incident Management' }
         ]}
         title="Governance Incident Management & Rollback"
         subtitle="Automated safety containment, statistical drift escalation, and verified cryptographic version rollback."

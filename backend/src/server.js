@@ -1,8 +1,11 @@
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
+
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-import { connectDB } from './config/db.js';
+import { connectDB, getDatabaseStatus } from './config/db.js';
 import apiRouter from './routes/api.js';
 import { securityHeaders } from './middleware/securityMiddleware.js';
 
@@ -59,14 +62,30 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'HEALTHY',
+// Health check endpoint (support both /health and /api/health)
+const handleHealthCheck = (req, res) => {
+  const dbStatus = getDatabaseStatus();
+  const isHealthy = dbStatus.connected;
+
+  const payload = {
+    status: isHealthy ? 'HEALTHY' : 'UNHEALTHY',
     service: 'Enterprise AI Governance Platform API',
-    timestamp: new Date().toISOString()
-  });
-});
+    timestamp: new Date().toISOString(),
+    database: {
+      status: dbStatus.connected ? 'CONNECTED' : 'DISCONNECTED',
+      name: dbStatus.databaseName,
+      storageMode: dbStatus.storageMode,
+      isMemory: dbStatus.isMemory,
+      ready: dbStatus.connected
+    }
+  };
+
+  const statusCode = isHealthy ? 200 : 503;
+  res.status(statusCode).json(payload);
+};
+
+app.get('/health', handleHealthCheck);
+app.get('/api/health', handleHealthCheck);
 
 // Mount consolidated REST routes
 app.use('/api', apiRouter);

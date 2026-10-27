@@ -42,3 +42,8 @@ ENV/
 htmlcov/
 runtime_drift_report*.html
 drift_report.html
+
+# Local uploads and database/model backups
+/uploads/
+/backend/uploads/
+/backend/backups/

@@ -181,3 +181,108 @@ export function evaluatePolicyGates({ policy, evaluation, modelVersion = {}, mod
     evaluatedAt: new Date()
   };
 }
+
+/**
+ * Evaluates whether an evaluation's measured performance and fairness metrics
+ * meet the applicable evaluation criteria.
+ * 
+ * Separates the evaluation metric outcome from institutional policy compliance.
+ * 
+ * @param {Object} options
+ * @param {Object} options.evaluation - Evaluation document or metrics payload
+ * @param {Object} [options.rules] - Threshold rules (from assigned policy or established defaults)
+ * @returns {{ passed: boolean, reasons: string[], breakdown: { fairnessPassed: boolean, performancePassed: boolean } }}
+ */
+export function evaluateEvaluationOutcome({ evaluation, rules = {} }) {
+  if (!evaluation) {
+    return {
+      passed: false,
+      reasons: ['No evaluation metrics available.'],
+      breakdown: { fairnessPassed: false, performancePassed: false }
+    };
+  }
+
+  const perf = evaluation.performanceMetrics || {};
+  const fairness = evaluation.fairnessMetrics || {};
+  const failureReasons = [];
+
+  // 1. Fairness evaluation outcome
+  let fairnessPassed = true;
+  const isFairnessEvaluated = fairness.fairnessEvaluated === true ||
+    (fairness.fairnessEvaluated !== false &&
+     ((fairness.disparateImpactRatio !== undefined && fairness.disparateImpactRatio !== null && fairness.disparateImpactRatio > 0) ||
+      (Boolean(fairness.protectedAttribute) && fairness.protectedAttribute !== 'NONE' && fairness.protectedAttribute !== 'N/A')));
+
+  const dir = fairness.disparateImpactRatio ?? 0;
+  const dpd = fairness.demographicParityDiff ?? 0;
+
+  // Use policy rules if provided, otherwise established baseline statutory thresholds from Policy schema
+  const minDIR = rules.minDisparateImpact !== undefined ? rules.minDisparateImpact : 0.80;
+  const maxDIR = rules.maxDisparateImpact !== undefined ? rules.maxDisparateImpact : 1.25;
+  const maxDPD = rules.maxDemographicParityDiff !== undefined ? rules.maxDemographicParityDiff : 0.10;
+
+  if (isFairnessEvaluated) {
+    if (dir < minDIR) {
+      fairnessPassed = false;
+      failureReasons.push(`Disparate Impact Ratio (${dir}) is below the required threshold of ${minDIR} (80% benchmark rule violation).`);
+    }
+    if (dir > maxDIR) {
+      fairnessPassed = false;
+      failureReasons.push(`Disparate Impact Ratio (${dir}) exceeds the upper bound threshold of ${maxDIR}.`);
+    }
+    if (dpd > maxDPD) {
+      fairnessPassed = false;
+      failureReasons.push(`Demographic Parity Difference (${dpd}) exceeds the allowed limit of ${maxDPD}.`);
+    }
+  }
+
+  // 2. Performance evaluation outcome
+  let performancePassed = true;
+  const minAcc = rules.minAccuracy !== undefined ? rules.minAccuracy : 0.80;
+  if (perf.accuracy !== null && perf.accuracy !== undefined) {
+    if (perf.accuracy < minAcc) {
+      performancePassed = false;
+      failureReasons.push(`Accuracy (${perf.accuracy}) is below required minimum of ${minAcc}.`);
+    }
+  }
+
+  if (rules.minPrecision !== undefined && perf.precision !== null && perf.precision !== undefined) {
+    if (perf.precision < rules.minPrecision) {
+      performancePassed = false;
+      failureReasons.push(`Precision (${perf.precision}) is below required minimum of ${rules.minPrecision}.`);
+    }
+  }
+
+  if (rules.minRecall !== undefined && perf.recall !== null && perf.recall !== undefined) {
+    if (perf.recall < rules.minRecall) {
+      performancePassed = false;
+      failureReasons.push(`Recall (${perf.recall}) is below required minimum of ${rules.minRecall}.`);
+    }
+  }
+
+  if (rules.minRocAuc !== undefined) {
+    if (perf.rocAuc === null || perf.rocAuc === undefined) {
+      performancePassed = false;
+      failureReasons.push(`ROC-AUC score is missing, but minimum ROC-AUC of ${rules.minRocAuc} is required.`);
+    } else if (perf.rocAuc < rules.minRocAuc) {
+      performancePassed = false;
+      failureReasons.push(`ROC-AUC (${perf.rocAuc}) is below required minimum of ${rules.minRocAuc}.`);
+    }
+  } else if (perf.rocAuc !== null && perf.rocAuc !== undefined) {
+    // If continuous ROC-AUC is present without explicit policy override, baseline minimum is 0.70
+    if (perf.rocAuc < 0.70) {
+      performancePassed = false;
+      failureReasons.push(`ROC-AUC (${perf.rocAuc}) is below baseline minimum of 0.70.`);
+    }
+  }
+
+  const passed = fairnessPassed && performancePassed;
+  return {
+    passed,
+    reasons: failureReasons,
+    breakdown: {
+      fairnessPassed,
+      performancePassed
+    }
+  };
+}

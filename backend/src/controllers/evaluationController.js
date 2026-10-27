@@ -1,12 +1,14 @@
 import path from 'path';
+import * as xlsx from 'xlsx';
 import { Evaluation } from '../models/Evaluation.js';
 import { ModelVersion } from '../models/ModelVersion.js';
 import { Model } from '../models/Model.js';
 import { Policy } from '../models/Policy.js';
 import { evaluateModelMetrics } from '../services/fairnessEngine.js';
-import { evaluatePolicyGates } from '../services/policyEngine.js';
+import { evaluatePolicyGates, evaluateEvaluationOutcome } from '../services/policyEngine.js';
 import { recordAuditEvent } from '../services/auditEngine.js';
-import { parseAndValidateEvaluationFile } from '../services/evaluationImportService.js';
+import { parseAndValidateEvaluationFile, parseBinaryLabel } from '../services/evaluationImportService.js';
+import { resolveEffectiveApiConfig, executeModelInference } from '../services/inferenceService.js';
 
 export async function runEvaluation(req, res) {
   try {
@@ -152,6 +154,8 @@ export async function runEvaluation(req, res) {
     }
 
     let policyDecision = null;
+    let evaluationPassed = false;
+
     if (policy) {
       policyDecision = evaluatePolicyGates({
         policy,
@@ -159,18 +163,29 @@ export async function runEvaluation(req, res) {
         modelVersion: version,
         model
       });
+      // Model's measured evaluation outcome passes if both fairness and performance criteria pass
+      evaluationPassed = (
+        policyDecision?.gateBreakdown?.fairnessGate?.status === 'PASSED' &&
+        policyDecision?.gateBreakdown?.performanceGate?.status === 'PASSED'
+      );
     } else {
       policyDecision = {
         passed: false,
         overallDecision: 'BLOCKED',
+        noPolicyAssigned: true,
         reasons: [`No governance policy assigned to model "${model.name}". A Governance Officer must assign an active governance policy.`],
         evaluations: []
       };
+      // When no institutional policy is assigned, determine evaluation outcome against baseline evaluation criteria
+      const evalOutcome = evaluateEvaluationOutcome({ evaluation });
+      evaluationPassed = evalOutcome.passed;
     }
 
-    // Update ModelVersion status
+    // Update ModelVersion status:
+    // 1. evaluationStatus: outcome of measured evaluation metrics against applicable evaluation criteria
+    // 2. policyStatus: compliance with institutional governance policy gates
     version.latestEvaluationId = evaluation._id;
-    version.evaluationStatus = policyDecision?.passed ? 'EVALUATED_PASS' : 'EVALUATED_FAIL';
+    version.evaluationStatus = evaluationPassed ? 'EVALUATED_PASS' : 'EVALUATED_FAIL';
     version.policyStatus = policyDecision?.passed ? 'PASSED' : 'FAILED';
     version.latestPolicyEvaluation = policyDecision;
 
@@ -216,6 +231,42 @@ export async function runEvaluation(req, res) {
         reasons: policyDecision?.reasons || []
       }
     });
+
+    // Technical evaluation & Policy gating notifications
+    try {
+      const { dispatchNotification } = await import('../services/notificationService.js');
+      // 1. Notify ML Lead / model owner about evaluation completion
+      await dispatchNotification({
+        recipientRole: 'ML_LEAD',
+        title: `Evaluation completed: ${model.name} ${version.version}`,
+        message: `Evaluation completed for ${model.name} (${version.version}). Accuracy: ${((evalPerformanceMetrics.accuracy || 0) * 100).toFixed(1)}%, Policy Status: ${policyDecision?.passed ? 'PASSED' : 'FAILED'}.`,
+        type: 'EVALUATION_COMPLETED',
+        severity: policyDecision?.passed ? 'INFO' : 'WARNING',
+        targetUrl: `/app/models/${model._id}`,
+        modelId: model._id,
+        versionId: version._id,
+        idempotencyKey: `eval_completed_${evaluation._id}`,
+        actor
+      });
+
+      // 2. If policy gate passed, notify Governance Officers that review is required
+      if (policyDecision?.passed) {
+        await dispatchNotification({
+          recipientRole: 'GOVERNANCE_OFFICER',
+          title: `Policy gate passed: ${model.name} ${version.version}`,
+          message: `Model "${model.name}" (${version.version}) passed all governance policy gates. Governance stage-gate review is now required.`,
+          type: 'POLICY_GATE',
+          severity: 'INFO',
+          targetUrl: '/app/approvals',
+          modelId: model._id,
+          versionId: version._id,
+          idempotencyKey: `policy_gate_passed_${version._id}`,
+          actor: 'Automated Policy Engine'
+        });
+      }
+    } catch (notifErr) {
+      console.warn('[Notification] Evaluation notification warning:', notifErr.message);
+    }
 
 
     res.status(201).json({
@@ -272,7 +323,7 @@ export async function uploadEvaluation(req, res) {
       return res.status(400).json({ success: false, error: 'Uploaded file is empty or missing.' });
     }
 
-    const parsed = parseAndValidateEvaluationFile({
+    let parsed = parseAndValidateEvaluationFile({
       buffer: req.file.buffer,
       filename: req.file.originalname,
       datasetName: datasetName || req.file.originalname,
@@ -280,6 +331,72 @@ export async function uploadEvaluation(req, res) {
       privilegedGroup,
       unprivilegedGroup
     });
+
+    // If dataset has ground-truth but is missing predictions, attempt dynamic auto-scoring via model endpoint
+    if (parsed.error && /Missing required column: "predicted"/i.test(parsed.error)) {
+      const apiConfig = resolveEffectiveApiConfig(model.apiConfig, version.apiConfig);
+      if (apiConfig?.endpointUrl) {
+        try {
+          const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+          const sheetName = workbook.SheetNames[0];
+          const rawRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: null });
+
+          if (rawRows && rawRows.length >= 10) {
+            const scoredRows = [];
+            for (const row of rawRows) {
+              const inputPayload = { ...row };
+              delete inputPayload.actual;
+              delete inputPayload.actual_label;
+              delete inputPayload.ground_truth;
+              delete inputPayload.target;
+              delete inputPayload.TARGET;
+              delete inputPayload.label;
+              delete inputPayload.predicted;
+              delete inputPayload.prediction;
+              delete inputPayload.probability;
+              delete inputPayload.score;
+              delete inputPayload._id;
+
+              const infResult = await executeModelInference({
+                modelId: model._id,
+                versionId: version._id,
+                inputPayload,
+                options: { allowDraft: true, allowLocal: true },
+                context: { user: req.user || { name: 'Auto-Evaluator', role: 'ML_LEAD' } }
+              });
+
+              const prob = typeof infResult.prediction === 'number' ? infResult.prediction : null;
+              const threshold = typeof apiConfig.responseMapping?.threshold === 'number' ? apiConfig.responseMapping.threshold : 0.20;
+              const predVal = prob !== null ? (prob >= threshold ? 1 : 0) : parseBinaryLabel(infResult.prediction);
+
+              scoredRows.push({
+                ...row,
+                predicted: predVal !== null ? predVal : 0,
+                probability: prob !== null ? prob : undefined
+              });
+            }
+
+            if (scoredRows.length === rawRows.length) {
+              const newWs = xlsx.utils.json_to_sheet(scoredRows);
+              const newWb = xlsx.utils.book_new();
+              xlsx.utils.book_append_sheet(newWb, newWs, 'Evaluation');
+              const newBuffer = xlsx.write(newWb, { type: 'buffer', bookType: 'csv' });
+
+              parsed = parseAndValidateEvaluationFile({
+                buffer: newBuffer,
+                filename: req.file.originalname,
+                datasetName: datasetName || req.file.originalname,
+                protectedAttribute,
+                privilegedGroup,
+                unprivilegedGroup
+              });
+            }
+          }
+        } catch {
+          // If auto-scoring fails, retain original parsed.error
+        }
+      }
+    }
 
     if (parsed.error) {
       return res.status(400).json({ success: false, error: parsed.error });
@@ -343,6 +460,8 @@ export async function uploadEvaluation(req, res) {
     }
 
     let policyDecision = null;
+    let evaluationPassed = false;
+
     if (policy) {
       policyDecision = evaluatePolicyGates({
         policy,
@@ -350,18 +469,29 @@ export async function uploadEvaluation(req, res) {
         modelVersion: version,
         model
       });
+      // Model's measured evaluation outcome passes if both fairness and performance criteria pass
+      evaluationPassed = (
+        policyDecision?.gateBreakdown?.fairnessGate?.status === 'PASSED' &&
+        policyDecision?.gateBreakdown?.performanceGate?.status === 'PASSED'
+      );
     } else {
       policyDecision = {
         passed: false,
         overallDecision: 'BLOCKED',
+        noPolicyAssigned: true,
         reasons: [`No governance policy assigned to model "${model.name}". A Governance Officer must assign an active governance policy.`],
         evaluations: []
       };
+      // When no institutional policy is assigned, determine evaluation outcome against baseline evaluation criteria
+      const evalOutcome = evaluateEvaluationOutcome({ evaluation });
+      evaluationPassed = evalOutcome.passed;
     }
 
-    // Update ModelVersion status
+    // Update ModelVersion status:
+    // 1. evaluationStatus: outcome of measured evaluation metrics against applicable evaluation criteria
+    // 2. policyStatus: compliance with institutional governance policy gates
     version.latestEvaluationId = evaluation._id;
-    version.evaluationStatus = policyDecision?.passed ? 'EVALUATED_PASS' : 'EVALUATED_FAIL';
+    version.evaluationStatus = evaluationPassed ? 'EVALUATED_PASS' : 'EVALUATED_FAIL';
     version.policyStatus = policyDecision?.passed ? 'PASSED' : 'FAILED';
     version.latestPolicyEvaluation = policyDecision;
 
@@ -411,6 +541,42 @@ export async function uploadEvaluation(req, res) {
         reasons: policyDecision?.reasons || []
       }
     });
+
+    // Technical evaluation & Policy gating notifications
+    try {
+      const { dispatchNotification } = await import('../services/notificationService.js');
+      // 1. Notify ML Lead / model owner about evaluation completion
+      await dispatchNotification({
+        recipientRole: 'ML_LEAD',
+        title: `Evaluation completed: ${model.name} ${version.version}`,
+        message: `Evaluation completed for ${model.name} (${version.version}). Accuracy: ${((evalPerformanceMetrics.accuracy || 0) * 100).toFixed(1)}%, Policy Status: ${policyDecision?.passed ? 'PASSED' : 'FAILED'}.`,
+        type: 'EVALUATION_COMPLETED',
+        severity: policyDecision?.passed ? 'INFO' : 'WARNING',
+        targetUrl: `/app/models/${model._id}`,
+        modelId: model._id,
+        versionId: version._id,
+        idempotencyKey: `eval_completed_${evaluation._id}`,
+        actor
+      });
+
+      // 2. If policy gate passed, notify Governance Officers that review is required
+      if (policyDecision?.passed) {
+        await dispatchNotification({
+          recipientRole: 'GOVERNANCE_OFFICER',
+          title: `Policy gate passed: ${model.name} ${version.version}`,
+          message: `Model "${model.name}" (${version.version}) passed all governance policy gates. Governance stage-gate review is now required.`,
+          type: 'POLICY_GATE',
+          severity: 'INFO',
+          targetUrl: '/app/approvals',
+          modelId: model._id,
+          versionId: version._id,
+          idempotencyKey: `policy_gate_passed_${version._id}`,
+          actor: 'Automated Policy Engine'
+        });
+      }
+    } catch (notifErr) {
+      console.warn('[Notification] Evaluation notification warning:', notifErr.message);
+    }
 
 
     res.status(201).json({

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getModels, getComplianceDossier } from '../services/api';
+import { getModels, getComplianceDossier, downloadComplianceDossierPdf } from '../services/api';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import LoadingSkeleton from '../components/LoadingSkeleton';
@@ -25,7 +25,8 @@ import {
   GitBranch,
   Activity,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  FileText
 } from 'lucide-react';
 
 export default function ComplianceDossier() {
@@ -40,6 +41,7 @@ export default function ComplianceDossier() {
   const [dossier, setDossier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -102,6 +104,24 @@ export default function ComplianceDossier() {
       setError(err.message || 'Failed to load compliance dossier');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!dossier || !selectedModelId) return;
+    try {
+      setDownloadingPdf(true);
+      await downloadComplianceDossierPdf(
+        selectedModelId,
+        selectedVersionId,
+        dossier.modelCard?.name || 'Model',
+        dossier.versionDetails?.version || 'v1.0'
+      );
+    } catch (err) {
+      console.error('PDF export error:', err);
+      alert(`PDF Export Failed: ${err.message}`);
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -278,44 +298,53 @@ ${disclaimers?.legalNotice || 'Classification Notice: AI Governance Risk Assessm
     <div className="page-container">
       <PageHeader
         breadcrumbs={[
-          { label: 'Governance', link: '/app' },
+          { label: 'Governance', to: '/app' },
           { label: 'Compliance Dossier' }
         ]}
         title="Compliance & Governance Technical Dossier"
         subtitle="Authoritative, evidence-based technical documentation and governance dossier aligned with EU AI Act and NIST AI RMF frameworks."
-        action={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              onClick={handlePrint} 
-              className="btn btn-secondary btn-sm" 
-              disabled={!dossier}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Printer size={13} /> Print / PDF
-            </button>
-            <button 
-              onClick={handleDownloadMarkdown} 
-              className="btn btn-secondary btn-sm" 
-              disabled={!dossier}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Download size={13} /> Export Markdown
-            </button>
-            <button 
-              onClick={handleDownloadJSON} 
-              className="btn btn-primary btn-sm" 
-              disabled={!dossier}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Download size={13} /> Export JSON
-            </button>
-          </div>
-        }
-      />
+      >
+        <div className="no-print" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button 
+            id="download-dossier-pdf-btn"
+            onClick={handleDownloadPDF} 
+            className="btn btn-primary btn-sm" 
+            disabled={!dossier || downloadingPdf}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+            title="Download official A4 compliance dossier PDF with selectable text"
+          >
+            <FileText size={14} /> {downloadingPdf ? 'Generating PDF...' : 'Download PDF'}
+          </button>
+          <button 
+            onClick={handleDownloadMarkdown} 
+            className="btn btn-secondary btn-sm" 
+            disabled={!dossier}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Download size={13} /> Export Markdown
+          </button>
+          <button 
+            onClick={handleDownloadJSON} 
+            className="btn btn-secondary btn-sm" 
+            disabled={!dossier}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Download size={13} /> Export JSON
+          </button>
+          <button 
+            onClick={handlePrint} 
+            className="btn btn-secondary btn-sm" 
+            disabled={!dossier}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Printer size={13} /> Print View
+          </button>
+        </div>
+      </PageHeader>
 
       {/* Model & Version Selectors */}
       {models.length > 0 && (
-        <div className="card" style={{ padding: '14px 18px', marginBottom: '20px' }}>
+        <div className="card no-print" style={{ padding: '14px 18px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-muted)' }}>Target Model:</span>
@@ -349,11 +378,23 @@ ${disclaimers?.legalNotice || 'Classification Notice: AI Governance Risk Assessm
             </div>
           )}
 
-          {dossier?.versionDetails?.isProduction && (
-            <span className="status-badge status-success" style={{ marginLeft: 'auto' }}>
-              ★ Active Production Version
-            </span>
-          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {dossier?.versionDetails?.isProduction && (
+              <span className="status-badge status-success">
+                ★ Active Production Version
+              </span>
+            )}
+            <button 
+              id="model-toolbar-download-pdf-btn"
+              onClick={handleDownloadPDF} 
+              className="btn btn-primary btn-sm" 
+              disabled={!dossier || downloadingPdf}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+              title="Download official A4 compliance dossier PDF with selectable text"
+            >
+              <FileText size={14} /> {downloadingPdf ? 'Generating PDF...' : 'Download PDF'}
+            </button>
+          </div>
         </div>
       </div>
       )}

@@ -70,6 +70,7 @@ const DRIFT_STATUS_MAP = {
   HEALTHY: 'Healthy',
   WARNING: 'Warning',
   DRIFT_DETECTED: 'Drift Detected',
+  INSUFFICIENT_DATA: 'Insufficient Data',
   NO_DATA: 'No Data Recorded',
   INCIDENT_ACTIVE: 'Incident Active'
 };

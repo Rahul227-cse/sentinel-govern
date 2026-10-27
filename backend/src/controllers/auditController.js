@@ -1,6 +1,7 @@
 import { verifyAuditChainIntegrity, simulateTamperOnBlock, repairAuditChain } from '../services/auditEngine.js';
 import { AuditLedger } from '../models/AuditLedger.js';
 import { compileGovernanceDossier, generateDossierMarkdown } from '../services/reportService.js';
+import { generateComplianceDossierPdf } from '../services/pdfService.js';
 
 export async function getAuditLedger(req, res) {
   try {
@@ -91,12 +92,25 @@ export async function exportComplianceDossier(req, res) {
       user: req.user
     });
 
+    const modelNameClean = (dossier.modelCard?.name || 'Model').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const versionClean = (dossier.versionDetails?.version || 'v1.0').replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+    if (req.query.format === 'pdf' || req.headers.accept?.includes('application/pdf')) {
+      const pdfBuffer = await generateComplianceDossierPdf(dossier);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="AI_Governance_Dossier_${modelNameClean}_${versionClean}.pdf"`
+      );
+      return res.send(pdfBuffer);
+    }
+
     if (req.query.format === 'markdown' || req.headers.accept?.includes('text/markdown')) {
       const markdown = generateDossierMarkdown(dossier);
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="AI_Governance_Dossier_${(dossier.modelCard?.name || 'Model').replace(/[^a-zA-Z0-9_-]/g, '_')}.md"`
+        `attachment; filename="AI_Governance_Dossier_${modelNameClean}_${versionClean}.md"`
       );
       return res.send(markdown);
     }
@@ -106,5 +120,10 @@ export async function exportComplianceDossier(req, res) {
     const status = error.statusCode || 500;
     res.status(status).json({ success: false, error: error.message });
   }
+}
+
+export async function exportComplianceDossierPdf(req, res) {
+  req.query.format = 'pdf';
+  return exportComplianceDossier(req, res);
 }
 

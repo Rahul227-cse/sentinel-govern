@@ -87,8 +87,10 @@ export function parseAndValidateEvaluationFile({
       return { error: `Specified protected attribute column "${protectedAttribute}" was not found in the uploaded dataset.` };
     }
   } else {
-    // Auto-detect common statutory protected attributes
-    activeProtectedKey = keys.find(k => /^(gender|sex|race|ethnicity|age|disability|nationality)$/i.test(k)) || null;
+    // Auto-detect common statutory protected attributes (prioritize categorical attributes over numeric age)
+    const preferredAttributes = ['gender', 'sex', 'race', 'ethnicity', 'disability', 'nationality', 'age'];
+    const matchedAttr = preferredAttributes.find(p => keys.some(k => k.toLowerCase() === p));
+    activeProtectedKey = matchedAttr ? keys.find(k => k.toLowerCase() === matchedAttr) : null;
   }
 
   // Row validation & parsing

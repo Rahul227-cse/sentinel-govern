@@ -18,26 +18,26 @@ export default function ProtectedRoute({ allowedRoles, children }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#F7F8FA',
-        color: '#0F172A',
+        backgroundColor: 'var(--color-bg)',
+        color: 'var(--color-text)',
         gap: '16px'
       }}>
         <div style={{
           width: '48px',
           height: '48px',
-          borderRadius: '12px',
-          backgroundColor: '#EFF6FF',
-          border: '1px solid #BFDBFE',
+          borderRadius: 'var(--radius-card)',
+          backgroundColor: 'var(--color-accent-subtle)',
+          border: '1px solid var(--color-accent-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#2563EB'
+          color: 'var(--color-primary)'
         }}>
           <Compass size={26} />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, fontSize: '14px', color: '#0F172A' }}>Sentinel Govern</div>
-          <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+          <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-text)' }}>Sentinel Govern</div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
             Verifying session…
           </div>
         </div>
